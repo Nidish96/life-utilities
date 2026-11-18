@@ -1,11 +1,50 @@
 // Smart capture ("Priya said she's craving ramen…") and bulk import of a big text dump.
 import { state, live, get, upsert, cfg } from '../state.js';
-import { $, $$, esc, setTitle, toast, catOptions, cat, CATS, today, go } from '../ui.js';
+import { $, $$, esc, setTitle, toast, catOptions, cat, CATS, today, go, fmtDate } from '../ui.js';
 import { aiReady, aiName, modelFor, extractFacts, heuristicExtract } from '../ai.js';
 import { enqueue } from '../enrich.js';
 import { uploadRaw } from '../media.js';
+import { findMatch } from '../match.js';
 
 const norm = s => (s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+// Who an item belongs to (existing profile), by id or name/alias.
+const personOf = it => (it.personId && get('people', it.personId)) || live('people').find(p => [p.name, ...(p.aliases || [])].some(n => norm(n) === norm(it.person)));
+
+// Mark each item that looks like something already saved for that person (or earlier in the same batch).
+// it.match = { fact, level: 'same' | 'similar' | 'conflict', batch? }; default action: skip exact repeats.
+export function checkDupes(items) {
+  const facts = live('facts');
+  items.forEach((it, i) => {
+    it.match = null;
+    if (it.category === 'memory' || !it.title) return;
+    const p = personOf(it);
+    const names = [p?.name || it.person, ...(p?.aliases || [])].filter(Boolean);
+    const earlier = items.slice(0, i).filter(o => o.keep && o.category !== 'memory' && norm(o.person) === norm(it.person) && (o.personId || null) === (it.personId || null))
+      .map(o => ({ title: o.title, category: o.category, batch: true }));
+    const m = (p && findMatch(it, facts.filter(f => f.personId === p.id), names)) || findMatch(it, earlier, names);
+    if (!m) { if (!it.dupeChosen) { it.dupeAction = 'new'; if (it.autoSkip) it.keep = true; it.autoSkip = false; } return; }
+    it.match = { ...m, batch: !!m.fact.batch };
+    if (!it.dupeChosen) {
+      it.dupeAction = m.level === 'same' ? 'skip' : 'new';
+      it.keep = it.dupeAction !== 'skip';
+      it.autoSkip = !it.keep;
+    }
+  });
+}
+
+function dupeHtml(it) {
+  const m = it.match;
+  if (!m) return '';
+  const f = m.fact;
+  const when = f.createdAt ? ` · saved ${fmtDate(new Date(f.createdAt).toISOString().slice(0, 10))}` : '';
+  if (m.level === 'conflict') return `<div class="dupe-note conflict">⚠️ Heads up: this clashes with <b>“${esc(f.title)}”</b> (${cat(f.category).e} ${esc(cat(f.category).l)})${when}.</div>`;
+  const msg = m.batch ? `🔁 You already have <b>“${esc(f.title)}”</b> above.`
+    : m.level === 'same' ? `🔁 Already saved: <b>“${esc(f.title)}”</b>${when}.`
+      : `🔁 Looks similar to <b>“${esc(f.title)}”</b>${when}.`;
+  const opts = m.batch ? [['skip', 'Skip'], ['new', 'Keep both']] : [['skip', 'Skip'], ['merge', 'Add to existing'], ['new', 'Save as new']];
+  return `<div class="dupe-note">${msg}<div class="seg">${opts.map(([k, l]) => `<button type="button" data-da="${k}" class="${it.dupeAction === k ? 'on' : ''}">${l}</button>`).join('')}</div></div>`;
+}
 
 /* ---------- saving reviewed items ---------- */
 export function saveItems(items, updates = [], source = 'capture') {
@@ -26,6 +65,16 @@ export function saveItems(items, updates = [], source = 'capture') {
     const pid = resolve(it);
     if (!pid) continue;
     people.add(pid);
+    if (it.dupeAction === 'merge' && it.match?.fact?.id) {
+      const ex = get('facts', it.match.fact.id);
+      if (ex) {
+        const add = (it.detail || '').trim();
+        if (add && !norm(ex.detail).includes(norm(add))) ex.detail = [ex.detail, add].filter(Boolean).join('\n');
+        ex.tags = [...new Set([...(ex.tags || []), ...(it.tags || [])])];
+        upsert('facts', ex); n++;
+        continue;
+      }
+    }
     if (it.category === 'memory') {
       upsert('memories', { personIds: [pid], title: it.title, note: it.detail || '', date: it.date || today(), photos: [] });
     } else {
@@ -54,7 +103,7 @@ function personSelect(it, newNames) {
     ${news.map(n => `<option value="new:${esc(n)}" ${!match && n === it.person ? 'selected' : ''}>＋ New: ${esc(n)}</option>`).join('')}
     <option value="ask">＋ Someone else…</option></select>`;
 }
-function bindPersonSelect(sel, it, onNew) {
+function bindPersonSelect(sel, it, onNew, onChange) {
   sel.onchange = () => {
     const v = sel.value;
     if (v === 'ask') {
@@ -65,6 +114,7 @@ function bindPersonSelect(sel, it, onNew) {
     }
     if (v.startsWith('id:')) { it.personId = v.slice(3); it.person = get('people', it.personId)?.name; }
     else { it.personId = null; it.person = v.slice(4); }
+    onChange?.();
   };
 }
 
@@ -137,32 +187,38 @@ function review(el, { items, updates }, done) {
   items.forEach(it => { it.keep = true; it.personId = it.person_id || null; it.enrich = !!it.searchable && it.category !== 'memory'; if (!CATS_OK(it.category)) it.category = 'other'; });
   updates.forEach(u => { u.keep = true; u.personId = u.person_id || null; });
   const draw = () => {
+    checkDupes(items);
     const newNames = [...new Set(items.filter(i => !i.personId).map(i => i.person))];
-    el.innerHTML = `<h3 class="section">Check & save <small>${items.length} item${items.length === 1 ? '' : 's'}</small></h3>
+    const nDupes = items.filter(i => i.match && i.match.level !== 'conflict').length;
+    el.innerHTML = `<h3 class="section">Check & save <small>${items.length} item${items.length === 1 ? '' : 's'}${nDupes ? ` · ${nDupes} already saved or similar` : ''}</small></h3>
     ${items.map((it, i) => `
       <div class="card rv ${it.keep ? '' : 'off'}" data-i="${i}">
         <div class="row"><span class="rv-emoji">${it.category === 'memory' ? '📸' : cat(it.category).e}</span>${personSelect(it, newNames)}<button class="icon rv-x" title="Skip">${it.keep ? '✕' : '↺'}</button></div>
         <select class="csel">${catOptions(it.category, true)}</select>
         <input class="ttl" value="${esc(it.title)}" placeholder="Short title">
         <textarea class="dtl" rows="2" placeholder="Details">${esc(it.detail || '')}</textarea>
-        ${it.category !== 'memory' ? `<label class="check"><input type="checkbox" class="enr" ${it.enrich ? 'checked' : ''}> Look up details online (${aiReady() ? 'pictures, location, places to try' : 'pictures, map, search links'})</label>` : ''}
+        ${dupeHtml(it)}
+        ${it.category !== 'memory' && it.keep && it.dupeAction !== 'merge' ? `<label class="check"><input type="checkbox" class="enr" ${it.enrich ? 'checked' : ''}> Look up details online (${aiReady() ? 'pictures, location, places to try' : 'pictures, map, search links'})</label>` : ''}
       </div>`).join('')}
     ${updates.map((u, i) => `<label class="card check upd"><input type="checkbox" data-u="${i}" ${u.keep ? 'checked' : ''}> Update <b>${esc(u.person)}</b>: ${[u.birthday && `🎂 ${esc(u.birthday)}`, u.relation && esc(u.relation), u.aliases?.length && `aka ${esc(u.aliases.join(', '))}`].filter(Boolean).join(' · ')}</label>`).join('')}
     <button class="btn primary block" id="rv-save">Save ${items.filter(i => i.keep).length} item(s)</button>`;
     $$('.rv', el).forEach(card => {
       const it = items[+card.dataset.i];
-      bindPersonSelect($('.psel', card), it, draw);
+      bindPersonSelect($('.psel', card), it, draw, draw);
       $('.csel', card).onchange = e => { it.category = e.target.value; draw(); };
       $('.ttl', card).oninput = e => it.title = e.target.value;
+      $('.ttl', card).onchange = draw; // re-check for duplicates
+      $$('[data-da]', card).forEach(b => b.onclick = () => { it.dupeAction = b.dataset.da; it.dupeChosen = true; it.keep = it.dupeAction !== 'skip'; draw(); });
       $('.dtl', card).oninput = e => it.detail = e.target.value;
       const en = $('.enr', card); if (en) en.onchange = e => it.enrich = e.target.checked;
-      $('.rv-x', card).onclick = () => { it.keep = !it.keep; draw(); };
+      $('.rv-x', card).onclick = () => { it.keep = !it.keep; if (it.match) { it.dupeChosen = true; it.dupeAction = it.keep ? (it.dupeAction === 'skip' ? 'new' : it.dupeAction) : 'skip'; } draw(); };
     });
     $$('[data-u]', el).forEach(c => c.onchange = () => updates[+c.dataset.u].keep = c.checked);
     $('#rv-save', el).onclick = () => {
       const { n, people } = saveItems(items, updates);
+      const merged = items.filter(i => i.keep && i.dupeAction === 'merge').length, skipped = items.filter(i => !i.keep && i.match).length;
       const names = people.map(id => get('people', id)?.name).filter(Boolean);
-      el.innerHTML = `<div class="card ok">✅ Saved ${n} item${n === 1 ? '' : 's'} for ${people.map(id => `<a href="#/p/${id}">${esc(get('people', id)?.name)}</a>`).join(', ')}.
+      el.innerHTML = `<div class="card ok">✅ Saved ${n} item${n === 1 ? '' : 's'} for ${people.map(id => `<a href="#/p/${id}">${esc(get('people', id)?.name)}</a>`).join(', ')}${merged ? ` (${merged} added to existing)` : ''}.${skipped ? `<br><small>Skipped ${skipped} duplicate${skipped === 1 ? '' : 's'}.</small>` : ''}
         ${items.some(i => i.keep && i.enrich) ? '<br><small>Looking up details in the background…</small>' : ''}</div>`;
       toast(`Saved for ${names.join(', ')}`);
       done?.();
@@ -251,12 +307,14 @@ export function importPage(view) {
 
 function bulkReview(el, { items, updates }) {
   // de-duplicate within the dump, and flag things already saved
-  const existing = new Set(live('facts').map(f => f.personId + '|' + norm(f.title)));
-  const seen = new Set();
-  items = items.filter(it => {
-    const k = norm(it.person) + '|' + norm(it.title);
-    if (seen.has(k)) return false; seen.add(k); return true;
-  });
+  const allFacts = live('facts');
+  const kept = [];
+  for (const it of items) { // drop repeats within the dump itself
+    const same = kept.filter(o => norm(o.person) === norm(it.person));
+    const m = it.category !== 'memory' && findMatch(it, same, [it.person]);
+    if (!(m && m.level === 'same')) kept.push(it);
+  }
+  items = kept;
   const people = live('people');
   const findP = name => people.find(p => [p.name, ...(p.aliases || [])].some(n => norm(n) === norm(name)));
   const groups = new Map();
@@ -265,8 +323,10 @@ function bulkReview(el, { items, updates }) {
     const p = (it.person_id && get('people', it.person_id)) || findP(it.person);
     const key = p ? 'id:' + p.id : 'new:' + norm(it.person);
     if (!groups.has(key)) groups.set(key, { key, name: p ? p.name : it.person, personId: p?.id || null, items: [], updates: [] });
-    it.dupe = p && existing.has(p.id + '|' + norm(it.title));
-    it.keep = !it.dupe;
+    const m = p && it.category !== 'memory' ? findMatch(it, allFacts.filter(f => f.personId === p.id), [p.name, ...(p.aliases || [])]) : null;
+    it.dupe = m && m.level !== 'conflict' ? m : null;
+    it.conflict = m?.level === 'conflict' ? m : null;
+    it.keep = !(it.dupe && it.dupe.level === 'same');
     groups.get(key).items.push(it);
   }
   for (const u of updates) {
@@ -279,7 +339,7 @@ function bulkReview(el, { items, updates }) {
   const allPeople = people.sort((a, b) => a.name.localeCompare(b.name));
 
   el.innerHTML = `<h3 class="section">Review <small>${items.length} things · ${G.length} people</small></h3>
-  <p class="hint">Uncheck anything wrong, fix categories, or point a group at an existing profile. Grey items look like things you've already saved.</p>
+  <p class="hint">Uncheck anything wrong, fix categories, or point a group at an existing profile. Grey items were already saved, so they start unchecked; ones marked “similar” are worth a look.</p>
   ${G.map((g, gi) => `
     <details class="card group" open data-g="${gi}">
       <summary><b>${esc(g.name)}</b> <small>${g.items.length} items</small></summary>
@@ -289,10 +349,12 @@ function bulkReview(el, { items, updates }) {
         <option value="skip">Skip this person</option></select></div>
       ${g.updates.map(u => `<div class="muted small">↳ ${[u.birthday && `🎂 ${esc(u.birthday)}`, u.relation && esc(u.relation), u.aliases?.length && 'aka ' + esc(u.aliases.join(', '))].filter(Boolean).join(' · ')}</div>`).join('')}
       ${g.items.map((it, ii) => `
-        <div class="bi ${it.dupe ? 'dupe' : ''}" data-ii="${ii}">
+        <div class="bi ${it.dupe?.level === 'same' ? 'dupe' : ''}" data-ii="${ii}">
           <input type="checkbox" class="bk" ${it.keep ? 'checked' : ''}>
           <select class="bc">${catOptions(it.category, true)}</select>
-          <div class="grow"><input class="bt" value="${esc(it.title)}"><div class="small muted">${esc(it.detail || '')}</div></div>
+          <div class="grow"><input class="bt" value="${esc(it.title)}"><div class="small muted">${esc(it.detail || '')}</div>
+          ${it.dupe ? `<div class="small warn">🔁 ${it.dupe.level === 'same' ? 'Already saved' : 'Similar to'}: “${esc(it.dupe.fact.title)}”</div>` : ''}
+          ${it.conflict ? `<div class="small warn">⚠️ Clashes with “${esc(it.conflict.fact.title)}” (${esc(cat(it.conflict.fact.category).l)})</div>` : ''}</div>
         </div>`).join('')}
     </details>`).join('')}
   <div class="card">

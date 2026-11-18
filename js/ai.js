@@ -3,6 +3,7 @@
 import { cfg } from './state.js';
 import { today } from './ui.js';
 import { blobToBase64 } from './media.js';
+import { shortTitle } from './match.js';
 
 const ENDPOINT = 'https://api.anthropic.com/v1/messages';
 const GEMINI = 'https://generativelanguage.googleapis.com/v1beta/models';
@@ -134,35 +135,72 @@ const KW = [
   ['dream_vacation', /\b(dream|bucket list|someday|one day)\b.*\b(visit|go to|travel|trip|see)\b|\b(vacation|holiday) (to|in)\b/i],
   ['long_held_desire', /\b(always wanted|has wanted|dreams? of|wish(es)? (to|she|he))\b/i],
   ['gift_idea', /\b(wants? (a|an|the|to buy)|wish ?list|would love (a|an|to have)|eyeing|needs? a new)\b/i],
-  ['food', /\b(eat|food|dish|cuisine|biryani|pizza|pasta|sushi|ramen|noodles?|curry|dosa|idli|chaat|momos?|burger|coffee|tea|chai|cake|dessert|chocolate|ice ?cream|spicy|drink|wine|beer|cocktail|brunch|dinner|lunch|snack|restaurant)\b/i],
+  ['food', /\b(eat|eats|food|dish|cuisine|craving|craves|hungry|tasty|delicious|recipe|bake|baking|cook|biryani|pizza|pasta|sushi|ramen|noodles?|curry|dosa|idli|chaat|momos?|burgers?|coffee|tea|chai|cakes?|dessert|chocolates?|ice ?cream|spicy|drink|wine|beer|cocktails?|brunch|dinner|lunch|breakfast|snacks?|restaurant|corn ?dogs?|tacos?|burritos?|dumplings?|bao|kimchi|tteokbokki|bbq|barbecue|pancakes?|waffles?|donuts?|doughnuts?|croissants?|cheesecake|boba|bubble tea|matcha|latte|cappuccino|mangoe?s?|paneer|butter chicken|samosas?|falafel|shawarma|hummus|steak|salad|soup|pho|pad thai|dim sum|kebabs?|fries|cheese|bread|cookies?|brownies?|gelato|smoothie|juice|seafood|prawns?|fish|chicken|mutton|vegan|vegetarian)\b/i],
   ['place', /\b(cafe|café|park|beach|museum|bar|pub|mall|lake|temple|market|gallery|rooftop)\b/i],
-  ['music', /\b(song|band|singer|music|album|concert|playlist)\b/i],
-  ['movie_tv', /\b(movie|film|series|show|netflix|anime)\b/i],
-  ['book', /\b(book|novel|author|reading)\b/i],
+  ['music', /\b(songs?|bands?|singers?|music|albums?|concerts?|playlists?|swift|bts)\b/i],
+  ['movie_tv', /\b(movies?|films?|series|shows?|netflix|anime|k-?dramas?|sitcoms?)\b/i],
+  ['book', /\b(books?|novels?|authors?|reading|kindle)\b/i],
   ['activity', /\b(hiking|trek|swim|dance|yoga|climb|cycling|run|gaming|karaoke|pottery|painting)\b/i],
   ['fashion', /\b(dress|shoes|sneakers|perfume|jewel|watch|bag|style|wear)\b/i],
   ['hobby', /\b(hobby|collects?|plays?|learning)\b/i],
 ];
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+const MON = '(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)';
+// "3 Feb", "3rd of February 1994", "Feb 3", "February 3rd, 1994" → YYYY-MM-DD or --MM-DD
+export function parseDate(s) {
+  let m = s.match(new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?${MON}\\b,?\\s*(\\d{4})?`, 'i'));
+  let d, mo, y;
+  if (m) { d = +m[1]; mo = MONTHS.indexOf(m[2].slice(0, 3).toLowerCase()) + 1; y = m[3]; }
+  else if ((m = s.match(new RegExp(`\\b${MON}\\s+(\\d{1,2})(?:st|nd|rd|th)?\\b,?\\s*(\\d{4})?`, 'i')))) { mo = MONTHS.indexOf(m[1].slice(0, 3).toLowerCase()) + 1; d = +m[2]; y = m[3]; }
+  if (!mo || !d || d > 31) return null;
+  const md = `${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  return y ? `${y}-${md}` : `--${md}`;
+}
+
+const RELATIONS = 'best friend|friend|sister|brother|colleague|coworker|cousin|mom|mum|mother|dad|father|partner|wife|husband|girlfriend|boyfriend|boss|neighbou?r|aunt|uncle|niece|nephew|grandma|grandpa|roommate|flatmate';
+const PRONOUN_START = /^(she|he|they|her|his|their|them)\b/i;
+
 export function heuristicExtract(text, people, defaultPerson) {
   const names = [];
   for (const p of people) for (const n of [p.name, ...(p.aliases || [])]) if (n) names.push([n.toLowerCase(), p]);
-  const items = [];
-  for (const s of text.split(/(?<=[.!?])\s+|\n+/).map(x => x.trim()).filter(x => x.length > 3)) {
+  const items = [], updates = new Map();
+  const update = (person, personName, patch) => {
+    const k = (person?.id || personName).toLowerCase();
+    updates.set(k, { person: personName, person_id: person?.id || null, birthday: null, relation: null, aliases: [], ...(updates.get(k) || {}), ...patch });
+  };
+  // "my sister Meera" / "Meera, my colleague"
+  for (const m of text.matchAll(new RegExp(`\\b[Mm]y (${RELATIONS})\\s+([A-Z][a-z]+)|\\b([A-Z][a-z]+),? (?:is )?[Mm]y (${RELATIONS})\\b`, 'g'))) {
+    const name = m[2] || m[3], rel = (m[1] || m[4]).toLowerCase();
+    const known = names.find(([n]) => n === name.toLowerCase());
+    if (!known) names.push([name.toLowerCase(), { name }]);
+    update(known?.[1]?.id ? known[1] : null, known?.[1]?.name || name, { relation: rel });
+  }
+  // split into sentences, and "…, and she said…" clauses
+  const parts = text.split(/(?<=[.!?])\s+|\n+|;\s+|,\s+(?:and|but)\s+(?=(?:she|he|they|her|his|their)\b)/i).map(x => x.trim()).filter(x => x.length > 3);
+  let last = null;
+  for (const s of parts) {
     const low = s.toLowerCase();
     let person = names.find(([n]) => new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(low))?.[1];
     let personName = person?.name;
-    if (!person) {
-      const m = s.match(/\b([A-Z][a-z]+)\s+(?:loves?|likes?|said|says|told|wants?|hates?|mentioned|adores?|enjoys?|is|has|dreams?)\b/);
-      const seen = names.find(([n]) => new RegExp(`\\b${n}\\b`, 'i').test(s));
-      if (seen) { person = seen[1].id ? seen[1] : null; personName = seen[1].name; }
-      else if (m && !['I', 'We', 'She', 'He', 'They', 'My', 'It', 'This'].includes(m[1])) { personName = m[1]; names.push([m[1].toLowerCase(), { name: m[1] }]); }
+    if (person && !person.id) person = null;
+    if (!personName) {
+      const m = s.match(/\b([A-Z][a-z]+)(?:'s)?\s+(?:loves?|likes?|said|says|told|wants?|hates?|mentioned|adores?|enjoys?|is|has|been|dreams?|always|really|can't|doesn't|never)\b/);
+      if (PRONOUN_START.test(s) && last) ({ person, personName } = last);
+      else if (m && !['I', 'We', 'She', 'He', 'They', 'My', 'It', 'This', 'That', 'There', 'Her', 'His'].includes(m[1])) { personName = m[1]; names.push([m[1].toLowerCase(), { name: m[1] }]); }
       else if (defaultPerson) { person = defaultPerson; personName = defaultPerson.name; }
     }
     if (!personName) continue;
+    last = { person, personName };
+    const nameList = [personName, ...(person?.aliases || [])];
+    if (/\b(birthday|b'?day|born)\b/i.test(s)) {
+      const d = parseDate(s);
+      if (d) { update(person, personName, { birthday: d }); continue; }
+    }
+    if (new RegExp(`^\\W*(?:${nameList.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})?,? (?:is )?my (${RELATIONS})\\W*$`, 'i').test(s)) continue; // only a relation
     const category = (KW.find(([, re]) => re.test(s)) || ['other'])[0];
-    items.push({ person: personName, person_id: person?.id || null, category, title: s.replace(/[.!?]$/, '').slice(0, 70), detail: s, tags: [], searchable: !['memory', 'important_date', 'dislike'].includes(category), date: null });
+    items.push({ person: personName, person_id: person?.id || null, category, title: shortTitle(s, [...nameList, ...RELATIONS.split('|'), 'my'], true), detail: s.replace(/^(and|but)\s+/i, ''), tags: [], searchable: !['memory', 'important_date', 'dislike'].includes(category), date: null });
   }
-  return { items, updates: [] };
+  return { items, updates: [...updates.values()] };
 }
 
 /* ---------- 2. Look something up on the web ---------- */
@@ -237,20 +275,8 @@ export async function enrichItem(fact, person) {
 
 // Turn a fact into a short search phrase. Titles from the no-AI sorter can be whole sentences
 // ("Meera's been obsessed with Korean corn dogs"), so strip names and filler words.
-const STOP = new Set(('a an the and or but of to for in on at with from by about into is are was were be been being has have had do does did ' +
-  'she he they her his their them i me my we our you your it its this that these those really very so just also always never someday one day ' +
-  'loves love loved likes like liked wants want wanted wishes wish said says told mentioned obsessed crazy craving craves enjoys enjoy adores adore ' +
-  'would could should will can try trying tried go going went get getting some lot lots much more most favourite favorite new ' +
-  'lately recently these days nowadays dream dreams dreaming learn learning someday maybe hates hate dislikes allergic thing things stuff kind sort ' +
-  "she's he's they're it's i've she'd he'd").split(' '));
 export function searchTerms(fact, person) {
-  const title = (fact.title || '').trim();
-  if (title.split(/\s+/).length <= 5) return title;
-  const names = [person?.name, ...(person?.aliases || [])].filter(Boolean).flatMap(n => n.toLowerCase().split(/\s+/));
-  const words = title.replace(/[“”"().,!?;:]/g, ' ').split(/\s+/).filter(Boolean)
-    .map(w => w.replace(/['’]s$/i, ''))
-    .filter(w => !STOP.has(w.toLowerCase()) && !names.includes(w.toLowerCase()) && !/^\d+$/.test(w));
-  return (words.slice(0, 5).join(' ') || title).trim();
+  return shortTitle(fact.title, [person?.name, ...(person?.aliases || [])]);
 }
 
 const PHOTO_HINT = { food: 'food', dream_vacation: 'landscape', place: '', activity: '', hobby: '' };
