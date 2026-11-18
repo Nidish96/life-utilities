@@ -100,6 +100,10 @@ export function fmtMoney(n, cur) {
   return sym + v.toLocaleString();
 }
 
+// Currency symbol for a bill/document record (falls back to the app's currency).
+const CUR = { INR: '₹', USD: '$', EUR: '€', GBP: '£', AED: 'AED ', SGD: 'S$' };
+export const docSym = d => CUR[d.currency] || (d.currency && d.currency.length <= 3 && !/^[A-Z]{3}$/.test(d.currency) ? d.currency : cfg('currency'));
+
 export const initials = n => (n || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('');
 export function colorFor(s) {
   let h = 0; for (const ch of s || '') h = (h * 31 + ch.charCodeAt(0)) % 360;

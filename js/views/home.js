@@ -1,6 +1,7 @@
 import { live, get } from '../state.js';
 import { $, $$, esc, setTitle, avatarHtml, daysUntil, daysFromToday, fmtDate, photoImg, hydrate, shuffle, go } from '../ui.js';
 import { renderCapture } from './capture.js';
+import { claimsSummaryCard, openClaims, deadlineIn } from './reimb.js';
 import { INTENTS, setRerender, editMemory } from './people.js';
 
 export function home(view) {
@@ -11,6 +12,8 @@ export function home(view) {
   const mems = live('memories').filter(m => m.photos?.length).sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 8);
   const warr = live('documents').filter(d => { const n = daysFromToday(d.warrantyUntil); return n !== null && n >= 0 && n <= 60; });
   const follow = live('documents').filter(d => { const n = daysFromToday(d.followUp); return n !== null && n >= 0 && n <= 14; });
+  const claimDue = openClaims().filter(d => { const n = deadlineIn(d); return n !== null && n <= 14; });
+  const claimCard = claimsSummaryCard();
   const houses = live('houses').filter(h => !['rejected'].includes(h.status));
   const hr = new Date().getHours();
 
@@ -26,7 +29,9 @@ export function home(view) {
       <button class="btn" id="spin-rand" title="Random person">🎲</button></div>
       <div class="chips">${Object.entries(INTENTS).map(([k, v]) => `<button class="chip" data-i="${k}">${v.e} ${v.l}</button>`).join('')}</div>
     </div>` : ''}
-    ${warr.length || follow.length ? `<h3 class="section">Heads up</h3>
+    ${warr.length || follow.length || claimCard ? `<h3 class="section">Heads up</h3>
+      ${claimDue.map(d => { const n = deadlineIn(d); return `<a class="card row" href="#/d/${d.id}">⏰ <span class="grow">Claim ${esc(d.title)}</span><small>${n < 0 ? 'deadline passed' : n === 0 ? 'due today' : 'by ' + fmtDate(d.reimbDeadline)}</small></a>`; }).join('')}
+      ${claimCard}
       ${warr.map(d => `<a class="card row" href="#/d/${d.id}">🛡️ <span class="grow">${esc(d.title)}</span><small>warranty ends ${fmtDate(d.warrantyUntil)}</small></a>`).join('')}
       ${follow.map(d => `<a class="card row" href="#/d/${d.id}">🩺 <span class="grow">${esc(d.title)}</span><small>follow-up ${fmtDate(d.followUp)}</small></a>`).join('')}` : ''}
     ${mems.length ? `<h3 class="section">Memories</h3><div class="hscroll">${mems.map(m => `<button class="memthumb" data-mem="${m.id}">${photoImg(m.photos[0], 'mt')}<small>${esc(m.title || fmtDate(m.date))}</small></button>`).join('')}</div>` : ''}

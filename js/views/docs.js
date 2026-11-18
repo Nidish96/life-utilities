@@ -1,5 +1,6 @@
 import { state, live, get, upsert, remove, cfg } from '../state.js';
-import { $, $$, esc, setTitle, confirmDlg, toast, hydrate, fmtDate, fmtMoney, daysFromToday, today, go } from '../ui.js';
+import { $, $$, esc, setTitle, confirmDlg, toast, hydrate, fmtDate, fmtMoney, daysFromToday, today, go, docSym } from '../ui.js';
+import { RSTATUS, isClaim, claims, statusBadge, claimActions, wireClaimActions, claimsSummaryCard, deadlineIn } from './reimb.js';
 import { compressImage, uploadRaw, deletePhotos } from '../media.js';
 import { aiReady, extractDocument } from '../ai.js';
 
@@ -13,8 +14,7 @@ export const DTYPES = {
   other: { e: '📁', l: 'Other' },
 };
 const dt = k => DTYPES[k] || DTYPES.other;
-const CUR = { INR: '₹', USD: '$', EUR: '€', GBP: '£', AED: 'AED ', SGD: 'S$' };
-const sym = d => CUR[d.currency] || (d.currency && d.currency.length <= 3 && !/^[A-Z]{3}$/.test(d.currency) ? d.currency : cfg('currency'));
+const sym = docSym;
 
 /* ---------------- list ---------------- */
 let tfilter = 'all';
@@ -30,13 +30,14 @@ export function docsList(view) {
       const n = k === 'all' ? all.length : all.filter(d => d.type === k).length;
       return n || k === 'all' ? `<button class="chip ${tfilter === k ? 'on' : ''}" data-t="${k}">${l} <small>${n}</small></button>` : '';
     }).join('')}</div>
+    ${claimsSummaryCard(true)}
     ${spent ? `<p class="muted small">Bills & invoices in ${year}: <b>${fmtMoney(spent)}</b></p>` : ''}
     ${expiring.length ? `<div class="card warnbox">🛡️ Warranty ending soon: ${expiring.map(d => `<a href="#/d/${d.id}">${esc(d.title)} (${fmtDate(d.warrantyUntil)})</a>`).join(', ')}</div>` : ''}
     <div id="dlist"></div>
     <a class="fab" href="#/d/new" aria-label="Add document">＋</a>`;
   const draw = () => {
     const q = $('#ds').value.toLowerCase();
-    const list = all.filter(d => (tfilter === 'all' || d.type === tfilter) && (!q || JSON.stringify([d.title, d.vendor, d.doctor, d.patient, d.notes, d.tags, d.items, d.medicines, d.forWhom]).toLowerCase().includes(q)));
+    const list = all.filter(d => (tfilter === 'all' || d.type === tfilter) && (!q || JSON.stringify([d.title, d.vendor, d.doctor, d.patient, d.notes, d.tags, d.items, d.medicines, d.forWhom, d.reimbFrom, d.reimbRef]).toLowerCase().includes(q)));
     let lastYear = '';
     $('#dlist').innerHTML = list.map(d => {
       const y = (d.date || '').slice(0, 4) || 'Undated';
@@ -44,6 +45,7 @@ export function docsList(view) {
       const w = daysFromToday(d.warrantyUntil);
       return `${head}<a class="card dcard" href="#/d/${d.id}">${d.files?.[0]?.t ? `<img class="dthumb" data-fid="${esc(d.files[0].t)}" alt="">` : `<span class="dthumb">${dt(d.type).e}</span>`}
         <div class="grow"><b>${esc(d.title || 'Untitled')}</b><div class="small muted">${dt(d.type).e} ${esc(d.vendor || d.doctor || '')} ${d.date ? '· ' + fmtDate(d.date) : ''}${d.forWhom ? ' · for ' + esc(d.forWhom) : ''}</div>
+        ${isClaim(d) ? `<div class="small">${statusBadge(d)}${d.reimbFrom ? ` <span class="muted">${esc(d.reimbFrom)}</span>` : ''}</div>` : ''}
         ${w !== null ? `<div class="small ${w < 0 ? 'muted' : w <= 60 ? 'warn' : ''}">🛡️ ${w < 0 ? 'warranty expired' : 'warranty till ' + fmtDate(d.warrantyUntil)}</div>` : ''}</div>
         ${d.amount ? `<b class="amt">${fmtMoney(d.amount, sym(d))}</b>` : ''}</a>`;
     }).join('') || `<div class="empty">${all.length ? 'No matches.' : 'Nothing here yet. Tap ＋ and snap a bill, invoice or prescription — I\'ll read it and fill in the details.'}</div>`;
@@ -71,6 +73,11 @@ export function docDetail(view, id) {
       ${kv('Warranty until', d.warrantyUntil ? `${fmtDate(d.warrantyUntil)}${w !== null ? (w < 0 ? ' (expired)' : ` (${w} days left)`) : ''}` : '')}
       ${kv('Follow-up', fmtDate(d.followUp))} ${kv('Serial no.', d.serialNumber)} ${kv('Policy no.', d.policyNumber)}
     </div>
+    ${isClaim(d) ? `<div class="card" id="d-claim"><div class="row"><b class="grow">💸 Reimbursement</b>${statusBadge(d)}</div>
+      <div class="grid2">${kv('Claim from', d.reimbFrom)} ${kv('Claim by', d.reimbDeadline ? fmtDate(d.reimbDeadline) + (deadlineIn(d) !== null && deadlineIn(d) < 0 ? ' (passed)' : '') : '')}
+      ${kv('Submitted on', fmtDate(d.reimbSubmittedOn))} ${kv('Reference no.', d.reimbRef)}
+      ${kv('Received on', fmtDate(d.reimbPaidOn))} ${kv('Amount received', d.reimbPaidAmount != null ? fmtMoney(d.reimbPaidAmount, sym(d)) : '')}</div>
+      <div class="row ractions">${claimActions(d)}</div></div>` : ''}
     ${d.medicines?.length ? `<div class="card"><b>💊 Medicines</b><div class="tablewrap"><table><tr><th>Medicine</th><th>Dose</th><th>When</th><th>For</th></tr>${d.medicines.map(m => `<tr><td>${esc(m.name)}</td><td>${esc(m.dosage || '')}</td><td>${esc(m.frequency || '')}</td><td>${esc(m.duration || '')}</td></tr>`).join('')}</table></div></div>` : ''}
     ${d.items?.length ? `<div class="card"><b>🧾 Items</b><div class="tablewrap"><table><tr><th>Item</th><th>Qty</th><th>Price</th></tr>${d.items.map(m => `<tr><td>${esc(m.name)}</td><td>${esc(m.qty ?? '')}</td><td>${m.price ? fmtMoney(m.price, sym(d)) : ''}</td></tr>`).join('')}</table></div></div>` : ''}
     ${d.notes ? `<div class="card"><b>📝 Notes</b><p class="pre">${esc(d.notes)}</p></div>` : ''}
@@ -83,21 +90,23 @@ export function docDetail(view, id) {
   });
   $('#d-del').onclick = async () => {
     if (!(await confirmDlg('Delete this document and its files?'))) return;
-    deletePhotos(d.files); remove('documents', id); go('#/docs');
+    deletePhotos(d.files); remove('documents', id); go(isClaim(d) ? '#/reimb' : '#/docs');
   };
+  wireClaimActions(view, () => docDetail(view, id));
   hydrate(view);
 }
 const kv = (k, v) => (v ? `<div><small class="muted">${k}</small><div>${esc(v)}</div></div>` : '');
 
 /* ---------------- add / edit ---------------- */
-export function docEdit(view, id) {
+export function docEdit(view, id, q = {}) {
   const existing = id && id !== 'new' ? get('documents', id) : null;
-  const d = existing ? structuredClone(existing) : { type: 'bill', date: today(), files: [], items: [], medicines: [], tags: [] };
+  const d = existing ? structuredClone(existing) : { type: 'bill', date: today(), files: [], items: [], medicines: [], tags: [], reimbStatus: q.reimb ? 'pending' : null };
   const fresh = []; // files uploaded in this session, with blobs for AI reading
   let saved = false;
   d.tagsStr = (d.tags || []).join(', ');
   setTitle(existing ? 'Edit document' : 'Add bill or document', true);
   const people = live('people').map(p => p.name);
+  const froms = [...new Set(['Employer', 'Health insurance', ...claims().map(c => c.reimbFrom).filter(Boolean)])];
   const f = (k, label, type = 'text', extra = '') => `<label>${label}<input data-k="${k}" type="${type}" value="${esc(d[k] ?? '')}" ${extra}></label>`;
   view.innerHTML = `
     <div class="card">
@@ -121,6 +130,16 @@ export function docEdit(view, id) {
       <label>Notes<textarea data-k="notes" rows="3">${esc(d.notes || '')}</textarea></label>
       ${f('tagsStr', 'Tags <small>(comma separated)</small>')}
     </div>
+    <div class="card">
+      <label class="check"><input type="checkbox" id="d-reimb" ${isClaim(d) ? 'checked' : ''}> 💸 I need to claim this back (reimbursement)</label>
+      <div id="d-reimb-f" ${isClaim(d) ? '' : 'hidden'}>
+        <div class="grid2">${f('reimbFrom', 'Claim from', 'text', 'list="dfroms" placeholder="Employer"')}${f('reimbDeadline', 'Claim by <small>(deadline)</small>', 'date')}
+        <label>Status<select data-k="reimbStatus">${Object.entries(RSTATUS).map(([k, v]) => `<option value="${k}" ${(d.reimbStatus || 'pending') === k ? 'selected' : ''}>${v.e} ${v.l}</option>`).join('')}</select></label>
+        ${f('reimbRef', 'Reference no.')}${f('reimbSubmittedOn', 'Submitted on', 'date')}${f('reimbPaidOn', 'Received on', 'date')}
+        ${f('reimbPaidAmount', 'Amount received', 'number', 'inputmode="decimal" step="0.01"')}</div>
+        <datalist id="dfroms">${froms.map(n => `<option>${esc(n)}</option>`).join('')}</datalist>
+      </div>
+    </div>
     <button class="btn primary block big" id="d-save">Save</button>`;
 
   const drawFiles = () => {
@@ -129,6 +148,7 @@ export function docEdit(view, id) {
     hydrate($('#df'));
   };
   drawFiles();
+  $('#d-reimb').onchange = e => { $('#d-reimb-f').hidden = !e.target.checked; };
 
   const fill = x => {
     const map = { type: x.type, title: x.title, vendor: x.vendor, date: x.date, amount: x.amount, currency: x.currency, warrantyUntil: x.warranty_until, doctor: x.doctor, patient: x.patient, followUp: x.follow_up, serialNumber: x.serial_number, policyNumber: x.policy_number, notes: x.notes };
@@ -186,6 +206,12 @@ export function docEdit(view, id) {
     d.tags = (d.tagsStr || '').split(',').map(x => x.trim()).filter(Boolean); delete d.tagsStr;
     d.medicines = $('[data-list="medicines"]').value.split('\n').map(l => l.split('|').map(x => x.trim())).filter(a => a[0]).map(([name, dosage, frequency, duration]) => ({ name, dosage, frequency, duration }));
     d.items = $('[data-list="items"]').value.split('\n').map(l => l.split('|').map(x => x.trim())).filter(a => a[0]).map(([name, qty, price]) => ({ name, qty: qty ? +qty || qty : null, price: price ? +price.replace(/[^\d.]/g, '') || null : null }));
+    if (!$('#d-reimb').checked) for (const k of Object.keys(d)) { if (k.startsWith('reimb')) d[k] = null; }
+    else {
+      d.reimbStatus ||= 'pending';
+      if (d.reimbStatus === 'submitted' && !d.reimbSubmittedOn) d.reimbSubmittedOn = today();
+      if (d.reimbStatus === 'paid' && !d.reimbPaidOn) d.reimbPaidOn = today();
+    }
     if (!d.title) d.title = [dt(d.type).l, d.vendor].filter(Boolean).join(' — ');
     saved = true;
     const r = upsert('documents', d);

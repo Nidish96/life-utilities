@@ -7,6 +7,7 @@ import { peopleList, personPage } from './views/people.js';
 import { addPage, importPage } from './views/capture.js';
 import { housesList, houseDetail, houseEdit, houseReportPage } from './views/houses.js';
 import { docsList, docDetail, docEdit } from './views/docs.js';
+import { reimbList } from './views/reimb.js';
 import { welcome, settingsPage } from './views/settings.js';
 
 const routes = [
@@ -21,7 +22,8 @@ const routes = [
   [/^\/h\/([^/]+)\/edit$/, houseEdit, 'houses'],
   [/^\/h\/([^/]+)$/, houseDetail, 'houses'],
   [/^\/docs$/, docsList, 'docs'],
-  [/^\/d\/new$/, v => docEdit(v, 'new'), 'docs'],
+  [/^\/reimb$/, reimbList, 'docs'],
+  [/^\/d\/new$/, (v, q) => docEdit(v, 'new', q), 'docs'],
   [/^\/d\/([^/]+)\/edit$/, docEdit, 'docs'],
   [/^\/d\/([^/]+)$/, docDetail, 'docs'],
   [/^\/settings$/, settingsPage, ''],
