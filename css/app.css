@@ -242,6 +242,17 @@ img.broken { opacity: .3; }
 .rtiles .tile.sel { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 .pdfthumb { display: grid; place-items: center; aspect-ratio: 1; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); font-size: 14px; }
 
+/* ---------- app lock ---------- */
+html.locked body > :not(#lock) { visibility: hidden !important; }
+#lock { position: fixed; inset: 0; z-index: 1000; background: var(--bg); display: grid; place-items: center; padding: 24px 16px calc(24px + var(--safe-b)); overflow: auto; }
+.lockbox { width: 100%; max-width: 340px; text-align: center; }
+.lockbox h2 { margin-bottom: 16px; }
+.lockbox input { text-align: center; font-size: 20px; letter-spacing: .15em; }
+.lockbox .btn.ghost { margin-top: 6px; color: var(--muted); }
+.lockbox p.small { min-height: 1.2em; }
+.shake { animation: shake .35s; }
+@keyframes shake { 20%, 60% { transform: translateX(-8px); } 40%, 80% { transform: translateX(8px); } }
+
 @media print {
   .topbar, .tabbar, .fab, .noprint { display: none !important; }
   main { padding: 0; max-width: none; }

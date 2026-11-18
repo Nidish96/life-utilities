@@ -8,6 +8,7 @@ import { addPage, importPage } from './views/capture.js';
 import { housesList, houseDetail, houseEdit, houseReportPage } from './views/houses.js';
 import { docsList, docDetail, docEdit } from './views/docs.js';
 import { reimbList } from './views/reimb.js';
+import { initLock } from './lock.js';
 import { welcome, settingsPage } from './views/settings.js';
 
 const routes = [
@@ -105,6 +106,7 @@ window.addEventListener('beforeunload', e => { if (isDirty() && state.status !==
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
 
 async function boot() {
+  initLock();
   const mode = cfg('mode');
   if (mode) {
     state.backend = makeBackend(mode);
