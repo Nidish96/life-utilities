@@ -75,8 +75,8 @@ Open the URL on your phone. On iPhone, tap Safari's **Share** button and choose 
 - **Backups**: Settings → **Export JSON**. Photos are already files in your Drive folder.
 - **Models**: each provider has a "fast" model (sorting, lookups) and a "smart" one (bulk import, ideas, reports, bills). The defaults are `claude-haiku-5-5` / `claude-sonnet-5-5` for Claude and `gemini-flash-lite-latest` / `gemini-flash-latest` for Gemini. The `-latest` names automatically follow Google's newest Flash models. You can change any of them in Settings.
 - **Costs**: sorting a note costs a fraction of a cent on Claude and is usually free on Gemini's free tier. Note that Google may use free-tier requests to improve its products; the paid tier doesn't.
-- **Without an API key**, everything still works except the AI parts. Sorting falls back to simple keyword rules, and pictures come from Wikipedia.
-- Pictures come from Wikipedia and coordinates come from OpenStreetMap (both free). The maps use OpenStreetMap too.
+- **Without an API key, or when the AI fails** (e.g. a Gemini free-tier quota error), everything still works. Sorting falls back to simple keyword rules. *Look up details* falls back to free sources: a summary and picture from Wikipedia, a strip of openly licensed photos from Openverse / Wikimedia Commons (tap one to make it the picture), a map pin from OpenStreetMap for places, and search links (Google Maps near your home city, YouTube, Goodreads, shopping). The details sheet tells you when this happened and why.
+- Pictures come from Wikipedia, Openverse and Wikimedia Commons, and coordinates come from OpenStreetMap (all free). The maps use OpenStreetMap too.
 
 ## Files
 

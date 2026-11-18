@@ -118,7 +118,11 @@ export function renderCapture(el, { personId, text = '', onSaved } = {}) {
     const btn = $('#cap-go', el); btn.disabled = true; btn.textContent = 'Thinking…';
     try {
       const def = who ? get('people', who) : null;
-      const res = aiReady() ? await extractFacts(txt, live('people'), { defaultPerson: def }) : heuristicExtract(txt, live('people'), def);
+      let res;
+      if (aiReady()) {
+        try { res = await extractFacts(txt, live('people'), { defaultPerson: def }); }
+        catch (err) { toast(`${aiName()} didn't respond (${err.message.slice(0, 80)}) — used simple keyword sorting instead`, 6000); res = heuristicExtract(txt, live('people'), def); }
+      } else res = heuristicExtract(txt, live('people'), def);
       if (!res.items.length && !res.updates.length) toast("Couldn't find anything about a person in that. Pick who it's about and try again.");
       else review($('#cap-review', el), res, () => {
         $('#cap-text', el).value = '';
@@ -130,7 +134,7 @@ export function renderCapture(el, { personId, text = '', onSaved } = {}) {
 }
 
 function review(el, { items, updates }, done) {
-  items.forEach(it => { it.keep = true; it.personId = it.person_id || null; it.enrich = aiReady() && !!it.searchable && it.category !== 'memory'; if (!CATS_OK(it.category)) it.category = 'other'; });
+  items.forEach(it => { it.keep = true; it.personId = it.person_id || null; it.enrich = !!it.searchable && it.category !== 'memory'; if (!CATS_OK(it.category)) it.category = 'other'; });
   updates.forEach(u => { u.keep = true; u.personId = u.person_id || null; });
   const draw = () => {
     const newNames = [...new Set(items.filter(i => !i.personId).map(i => i.person))];
@@ -141,7 +145,7 @@ function review(el, { items, updates }, done) {
         <select class="csel">${catOptions(it.category, true)}</select>
         <input class="ttl" value="${esc(it.title)}" placeholder="Short title">
         <textarea class="dtl" rows="2" placeholder="Details">${esc(it.detail || '')}</textarea>
-        ${it.category !== 'memory' ? `<label class="check"><input type="checkbox" class="enr" ${it.enrich ? 'checked' : ''} ${aiReady() ? '' : 'disabled'}> Look up details online (picture, location, places to try)</label>` : ''}
+        ${it.category !== 'memory' ? `<label class="check"><input type="checkbox" class="enr" ${it.enrich ? 'checked' : ''}> Look up details online (${aiReady() ? 'pictures, location, places to try' : 'pictures, map, search links'})</label>` : ''}
       </div>`).join('')}
     ${updates.map((u, i) => `<label class="card check upd"><input type="checkbox" data-u="${i}" ${u.keep ? 'checked' : ''}> Update <b>${esc(u.person)}</b>: ${[u.birthday && `🎂 ${esc(u.birthday)}`, u.relation && esc(u.relation), u.aliases?.length && `aka ${esc(u.aliases.join(', '))}`].filter(Boolean).join(' · ')}</label>`).join('')}
     <button class="btn primary block" id="rv-save">Save ${items.filter(i => i.keep).length} item(s)</button>`;
@@ -224,9 +228,12 @@ export function importPage(view) {
     tick();
     const work = async idx => {
       try {
-        const r = aiReady()
-          ? await extractFacts(parts[idx], live('people'), { tier: 'smart', extraNames: [...extraNames] })
-          : heuristicExtract(parts[idx], live('people'), null);
+        let r;
+        try {
+          r = aiReady()
+            ? await extractFacts(parts[idx], live('people'), { tier: 'smart', extraNames: [...extraNames] })
+            : heuristicExtract(parts[idx], live('people'), null);
+        } catch (err) { errors.push(err.message + ' (used keyword sorting for this batch)'); r = heuristicExtract(parts[idx], live('people'), null); }
         r.items.forEach(i => { i.source = 'import'; if (!i.person_id && i.person) extraNames.add(i.person); });
         all.items.push(...r.items); all.updates.push(...r.updates);
       } catch (e) { errors.push(e.message); }
@@ -289,7 +296,7 @@ function bulkReview(el, { items, updates }) {
         </div>`).join('')}
     </details>`).join('')}
   <div class="card">
-    <label class="check"><input type="checkbox" id="bk-enrich" ${aiReady() ? '' : 'disabled'}> Also look up details online for foods, places, trips, books… (one extra ${aiName()} call each)</label>
+    <label class="check"><input type="checkbox" id="bk-enrich"> Also look up details online for foods, places, trips, books… (${aiReady() ? `one extra ${aiName()} call each, with free photos as backup` : 'free photos from Wikipedia & Openverse'})</label>
     <button class="btn primary block" id="bk-save">Save checked items</button>
   </div>`;
 

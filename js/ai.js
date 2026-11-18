@@ -1,5 +1,5 @@
 // AI calls to Claude or Gemini (direct from the browser with your own key), plus free lookups
-// from Wikipedia (pictures) and OpenStreetMap Nominatim (coordinates).
+// from Wikipedia (pictures), Openverse / Wikimedia Commons (photos) and OpenStreetMap Nominatim (coordinates).
 import { cfg } from './state.js';
 import { today } from './ui.js';
 import { blobToBase64 } from './media.js';
@@ -160,7 +160,7 @@ export function heuristicExtract(text, people, defaultPerson) {
     }
     if (!personName) continue;
     const category = (KW.find(([, re]) => re.test(s)) || ['other'])[0];
-    items.push({ person: personName, person_id: person?.id || null, category, title: s.replace(/[.!?]$/, '').slice(0, 70), detail: s, tags: [], searchable: ['food', 'place', 'dream_vacation', 'book', 'music', 'movie_tv'].includes(category), date: null });
+    items.push({ person: personName, person_id: person?.id || null, category, title: s.replace(/[.!?]$/, '').slice(0, 70), detail: s, tags: [], searchable: !['memory', 'important_date', 'dislike'].includes(category), date: null });
   }
   return { items, updates: [] };
 }
@@ -181,32 +181,118 @@ Return ONLY JSON:
 {"summary":"1–2 sentences","place":{"name":"","address":"","lat":0,"lng":0} or null,"wikipedia_title":"exact English Wikipedia article title that would have a good representative picture, or null","suggestions":[{"name":"","why":"","address":"","url":"","price":""}],"links":[{"title":"","url":""}]}
 Only include URLs you actually found. Be concise.`;
 
+// AI lookup first (if a key is set); if that fails or there's no key, fall back to free sources so you
+// still get a summary, contextual photos, a map pin and handy search links.
 export async function enrichItem(fact, person) {
   let e = {};
   if (aiReady()) {
-    const txt = await ask({
+    const req = {
       system: enrichSystem(cfg('homeCity')),
       content: `Person: ${person?.name || 'friend'}\nCategory: ${fact.category}\nItem: ${fact.title}\nContext: ${fact.detail || ''}`,
       tier: 'fast', web: true, webUses: 3, maxTokens: 3000,
-    });
-    e = parseJson(txt) || { summary: txt.slice(0, 400) };
-  }
-  const wt = e.wikipedia_title || (!aiReady() && fact.searchable ? fact.title : null);
+    };
+    try {
+      let txt;
+      try { txt = await ask(req); }
+      catch (err) {
+        // Web search (Google Search grounding) is often what fails on free tiers; try once without it,
+        // unless the key itself is out of quota / invalid.
+        if (/quota|rate|exhaust|429|api key|permission|billing/i.test(err.message)) throw err;
+        txt = await ask({ ...req, web: false });
+      }
+      e = parseJson(txt) || { summary: txt.slice(0, 400) };
+      e.mode = 'ai';
+    } catch (err) {
+      e = { mode: 'free', aiError: err.message };
+    }
+  } else e.mode = 'free';
+
+  const free = e.mode === 'free';
+  const q = searchTerms(fact, person);
+  const wt = e.wikipedia_title || (free ? q : null);
   if (wt) {
     const w = (await wikiSummary(wt)) || (await wikiSearchSummary(wt));
     if (w?.image) { e.image = w.image; e.imageSource = w.url; }
     if (!e.summary && w?.extract) e.summary = w.extract.slice(0, 300);
+    if (free && w?.url) e.wikiUrl = w.url;
+  }
+  // A strip of contextual photos (free, openly licensed), for both AI and free lookups.
+  const photos = await findPhotos(q, fact.category);
+  if (photos.length) {
+    e.photos = photos;
+    if (!e.image) { e.image = photos[0].src; e.imageSource = photos[0].page; }
   }
   if (e.place && !(+e.place.lat && +e.place.lng) && (e.place.address || e.place.name)) {
     const g = await geocode([e.place.name, e.place.address].filter(Boolean).join(', '));
     if (g) { e.place.lat = g.lat; e.place.lng = g.lng; }
   }
   if (fact.category === 'place' && !e.place) {
-    const g = await geocode(fact.title + (cfg('homeCity') ? ', ' + cfg('homeCity') : ''));
+    const g = await geocode(q + (cfg('homeCity') ? ', ' + cfg('homeCity') : '')) || await geocode(q);
     if (g) e.place = { name: fact.title, address: g.display, lat: g.lat, lng: g.lng };
   }
+  if (free) e.links = [...(e.links || []), ...searchLinks(q, fact.category)];
   e.at = Date.now();
   return e;
+}
+
+// Turn a fact into a short search phrase. Titles from the no-AI sorter can be whole sentences
+// ("Meera's been obsessed with Korean corn dogs"), so strip names and filler words.
+const STOP = new Set(('a an the and or but of to for in on at with from by about into is are was were be been being has have had do does did ' +
+  'she he they her his their them i me my we our you your it its this that these those really very so just also always never someday one day ' +
+  'loves love loved likes like liked wants want wanted wishes wish said says told mentioned obsessed crazy craving craves enjoys enjoy adores adore ' +
+  'would could should will can try trying tried go going went get getting some lot lots much more most favourite favorite new ' +
+  'lately recently these days nowadays dream dreams dreaming learn learning someday maybe hates hate dislikes allergic thing things stuff kind sort ' +
+  "she's he's they're it's i've she'd he'd").split(' '));
+export function searchTerms(fact, person) {
+  const title = (fact.title || '').trim();
+  if (title.split(/\s+/).length <= 5) return title;
+  const names = [person?.name, ...(person?.aliases || [])].filter(Boolean).flatMap(n => n.toLowerCase().split(/\s+/));
+  const words = title.replace(/[“”"().,!?;:]/g, ' ').split(/\s+/).filter(Boolean)
+    .map(w => w.replace(/['’]s$/i, ''))
+    .filter(w => !STOP.has(w.toLowerCase()) && !names.includes(w.toLowerCase()) && !/^\d+$/.test(w));
+  return (words.slice(0, 5).join(' ') || title).trim();
+}
+
+const PHOTO_HINT = { food: 'food', dream_vacation: 'landscape', place: '', activity: '', hobby: '' };
+export async function findPhotos(q, category, n = 6) {
+  if (!q) return [];
+  const hinted = PHOTO_HINT[category] && !q.toLowerCase().includes(PHOTO_HINT[category]) ? `${q} ${PHOTO_HINT[category]}` : q;
+  let out = await openverse(hinted, n);
+  if (out.length < 3 && hinted !== q) out = [...out, ...(await openverse(q, n))];
+  if (out.length < 3) out = [...out, ...(await commonsPhotos(q, n))];
+  const seen = new Set();
+  return out.filter(p => p.src && !seen.has(p.src) && seen.add(p.src)).slice(0, n);
+}
+async function openverse(q, n) {
+  try {
+    const r = await fetch(`https://api.openverse.org/v1/images/?q=${encodeURIComponent(q)}&page_size=${n}&mature=false`);
+    if (!r.ok) return [];
+    return ((await r.json()).results || []).map(x => ({
+      src: x.thumbnail || x.url, full: x.url, page: x.foreign_landing_url || x.url,
+      credit: [x.creator, x.license ? `CC ${String(x.license).toUpperCase()}` : ''].filter(Boolean).join(' · '), via: 'Openverse',
+    }));
+  } catch { return []; }
+}
+async function commonsPhotos(q, n) {
+  try {
+    const r = await fetch(`https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(q + ' filetype:bitmap')}&gsrnamespace=6&gsrlimit=${n}&prop=imageinfo&iiprop=url&iiurlwidth=480&format=json&origin=*`);
+    const pages = Object.values((await r.json())?.query?.pages || {}).sort((a, b) => (a.index || 0) - (b.index || 0));
+    return pages.map(p => p.imageinfo?.[0]).filter(Boolean).map(i => ({ src: i.thumburl || i.url, full: i.url, page: i.descriptionurl, credit: '', via: 'Wikimedia Commons' }));
+  } catch { return []; }
+}
+
+export function searchLinks(q, category) {
+  const city = cfg('homeCity');
+  const enc = encodeURIComponent;
+  const links = [];
+  if (['food', 'place', 'activity', 'hobby'].includes(category)) links.push({ title: `📍 Find "${q}"${city ? ' near ' + city : ' nearby'} on Google Maps`, url: `https://www.google.com/maps/search/${enc(q + (city ? ' near ' + city : ''))}` });
+  if (['music', 'movie_tv'].includes(category)) links.push({ title: `▶️ "${q}" on YouTube`, url: `https://www.youtube.com/results?search_query=${enc(q)}` });
+  if (category === 'book') links.push({ title: `📚 "${q}" on Goodreads`, url: `https://www.goodreads.com/search?q=${enc(q)}` });
+  if (['gift_idea', 'fashion'].includes(category)) links.push({ title: `🛍️ Shop for "${q}"`, url: `https://www.google.com/search?tbm=shop&q=${enc(q)}` });
+  if (category === 'dream_vacation') links.push({ title: `✈️ Travel guide for ${q}`, url: `https://en.wikivoyage.org/w/index.php?search=${enc(q)}` });
+  links.push({ title: `🖼️ More pictures of "${q}"`, url: `https://www.google.com/search?tbm=isch&q=${enc(q)}` });
+  links.push({ title: `🔎 Search the web for "${q}"`, url: `https://www.google.com/search?q=${enc(q + (city && ['food', 'place', 'activity'].includes(category) ? ' ' + city : ''))}` });
+  return links;
 }
 
 export async function wikiSummary(title) {
