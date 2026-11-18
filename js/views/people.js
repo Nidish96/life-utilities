@@ -136,7 +136,7 @@ function likesTab(el, p) {
   if (!fs.length) { el.innerHTML = `<div class="empty">Nothing saved for ${esc(p.name)} yet. Tap ＋ and type what they told you.</div>`; return; }
   el.innerHTML = `
     ${avoid.length ? `<div class="card avoid"><b>🚫 Avoid:</b> ${avoid.map(f => `<a href="#" data-fid-fact="${f.id}">${esc(f.title)}</a>`).join(' · ')}</div>` : ''}
-    ${pending.length && aiReady() ? `<button class="btn ghost block" id="enrich-all">🔎 Look up details for ${pending.length} item${pending.length === 1 ? '' : 's'}</button>` : ''}
+    ${pending.length ? `<button class="btn ghost block" id="enrich-all">🔎 Look up details for ${pending.length} item${pending.length === 1 ? '' : 's'}</button>` : ''}
     ${Object.keys(CATS).filter(c => c !== 'dislike').map(c => {
       const list = fs.filter(f => f.category === c);
       return list.length ? `<details class="catgroup" open><summary>${cat(c).e} ${cat(c).l} <small>${list.length}</small></summary><div class="facts">${list.map(factCard).join('')}</div></details>` : '';
@@ -152,7 +152,9 @@ export function factSheet(id) {
   const e = f.enrichment || {};
   const person = get('people', f.personId);
   const s = openSheet(`
-    ${e.image ? `<div class="fact-hero"><img src="${esc(e.image)}" alt="" referrerpolicy="no-referrer"></div>` : ''}
+    ${e.image ? `<div class="fact-hero"><img id="f-hero" src="${esc(e.image)}" alt="" referrerpolicy="no-referrer"></div>` : ''}
+    ${e.photos?.length > 1 ? `<div class="photostrip">${e.photos.map((p, i) => `<button class="${p.src === e.image ? 'on' : ''}" data-ph="${i}" title="Use as picture"><img src="${esc(p.src)}" alt="" loading="lazy" referrerpolicy="no-referrer"></button>`).join('')}</div>
+      <p class="small muted">Tap a photo to use it as the picture.</p>` : ''}
     <span class="chip on" style="--c:${cat(f.category).c}">${cat(f.category).e} ${cat(f.category).l}</span>
     <h2>${esc(f.title)}</h2>
     <p>${esc(f.detail || '')}</p>
@@ -164,7 +166,8 @@ export function factSheet(id) {
     ${e.suggestions?.length ? `<h4>Ideas & places</h4><ul class="sugs">${e.suggestions.map(x => `<li><b>${esc(x.name)}</b>${x.price ? ` · ${esc(x.price)}` : ''}${x.why ? `<br><small>${esc(x.why)}</small>` : ''}
       <div class="small">${x.address ? `<a target="_blank" rel="noopener" href="${mapsLink({ q: `${x.name} ${x.address}` })}">📍 ${esc(x.address)}</a> ` : ''}${safeUrl(x.url) ? `<a target="_blank" rel="noopener" href="${esc(x.url)}">🔗 link</a>` : ''}</div></li>`).join('')}</ul>` : ''}
     ${e.links?.filter(l => safeUrl(l.url)).length ? `<h4>Links</h4><ul class="links">${e.links.filter(l => safeUrl(l.url)).map(l => `<li><a target="_blank" rel="noopener" href="${esc(l.url)}">${esc(l.title || l.url)}</a></li>`).join('')}</ul>` : ''}
-    ${e.imageSource ? `<p class="small muted">Picture: <a href="${esc(e.imageSource)}" target="_blank" rel="noopener">Wikipedia</a></p>` : ''}
+    ${e.imageSource ? `<p class="small muted">Picture: <a href="${esc(e.imageSource)}" target="_blank" rel="noopener">${/wikipedia\.org/.test(e.imageSource) ? 'Wikipedia' : 'source & licence'}</a>${e.photos?.length ? ' · photos via Openverse / Wikimedia Commons' : ''}</p>` : ''}
+    ${e.aiError ? `<p class="small muted">ℹ️ The ${aiName()} lookup didn't work (${esc(e.aiError.slice(0, 140))}), so these are free results from Wikipedia, Openverse and OpenStreetMap.</p>` : ''}
     ${f.enrichStatus === 'error' ? `<p class="small warn">Lookup failed: ${esc(f.enrichError || '')}</p>` : ''}
     ${f.enrichStatus === 'pending' ? `<p class="small muted">⏳ Looking up details…</p>` : ''}
     <div class="row wrap">
@@ -173,6 +176,16 @@ export function factSheet(id) {
       <button class="btn" id="f-edit">✏️ Edit</button>
       <button class="btn danger" id="f-del">🗑</button>
     </div>`);
+  // hide photos that fail to load
+  $$('.photostrip img', s.el).forEach(img => img.addEventListener('error', () => { img.parentNode.hidden = true; }));
+  $$('[data-ph]', s.el).forEach(b => b.onclick = () => {
+    const p = e.photos[+b.dataset.ph];
+    f.enrichment = { ...e, image: p.src, imageSource: p.page || p.full };
+    upsert('facts', f);
+    $('#f-hero', s.el).src = p.src;
+    $$('[data-ph]', s.el).forEach(x => x.classList.toggle('on', x === b));
+    toast('Picture updated');
+  });
   $('#f-done', s.el).onclick = () => { f.done = !f.done; upsert('facts', f); s.close(); rerender(); };
   $('#f-enrich', s.el).onclick = () => { enqueue(f.id); toast('Looking it up…'); s.close(); rerender(); };
   $('#f-del', s.el).onclick = async () => { if (await confirmDlg(`Delete "${f.title}"?`)) { remove('facts', f.id); s.close(); rerender(); } };
