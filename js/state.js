@@ -4,6 +4,9 @@ import { emptyDb, mergeDb, normalize, uid, AuthNeeded } from './storage.js';
 const DEFAULTS = {
   fastModel: 'claude-haiku-5-5',
   smartModel: 'claude-sonnet-5-5',
+  provider: 'claude',
+  geminiFastModel: 'gemini-flash-lite-latest',
+  geminiSmartModel: 'gemini-flash-latest',
   homeCity: '',
   currency: '₹',
   folderName: CONFIG.driveFolderName || 'LifeUtilities',

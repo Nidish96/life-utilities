@@ -5,7 +5,7 @@ import {
 } from '../ui.js';
 import { uploadPhotos, deletePhotos } from '../media.js';
 import { enqueue } from '../enrich.js';
-import { aiReady, planIdeas } from '../ai.js';
+import { aiReady, aiName, planIdeas } from '../ai.js';
 import { renderCapture } from './capture.js';
 
 /* ---------------- list ---------------- */
@@ -307,11 +307,11 @@ function planTab(el, p, q) {
       }).join('') || `<div class="empty">Nothing saved for this yet. Capture a few things ${esc(p.name)} likes and they'll show up here.</div>`}</div>
       ${pool.length > 3 ? `<button class="btn primary block big" id="reshuffle">🔀 Shuffle (${pool.length} options)</button>` : ''}
       <div class="card">
-        <h3>✨ Fresh ideas from Claude</h3>
+        <h3>✨ Fresh ideas from ${aiName()}</h3>
         <input id="pl-extra" placeholder="Budget, date, constraints… (optional)">
         <label class="check"><input type="checkbox" id="pl-web" checked> Search the web for current options near me</label>
         <button class="btn block" id="pl-go" ${aiReady() ? '' : 'disabled'}>Get ideas for: ${I.e} ${I.l}</button>
-        ${aiReady() ? '' : '<p class="hint">Add a Claude API key in Settings to enable.</p>'}
+        ${aiReady() ? '' : '<p class="hint">Add a Claude or Gemini API key in Settings to enable.</p>'}
         <div id="pl-out"></div>
       </div>`;
     $$('[data-i]', el).forEach(b => b.onclick = () => { intent = b.dataset.i; history.replaceState(null, '', `#/p/${p.id}/plan?i=${intent}`); draw(); });

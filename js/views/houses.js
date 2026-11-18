@@ -1,7 +1,7 @@
 import { live, get, upsert, remove, cfg, setShared } from '../state.js';
 import { $, $$, esc, setTitle, openSheet, confirmDlg, toast, photoImg, hydrate, fmtDate, fmtMoney, stars, mapEmbed, mapsLink, md, today, go } from '../ui.js';
 import { uploadPhotos, deletePhotos } from '../media.js';
-import { aiReady, houseReport, geocode, reverseGeocode } from '../ai.js';
+import { aiReady, aiName, houseReport, geocode, reverseGeocode } from '../ai.js';
 
 const STATUS = {
   to_visit: { l: 'To visit', e: '🗓️' },
@@ -216,8 +216,8 @@ export function houseReportPage(view) {
       <b>Include</b>
       <div class="chips" id="rsel">${all.map(h => `<button class="chip ${sel.has(h.id) ? 'on' : ''}" data-id="${h.id}">${esc(h.title || 'Untitled')}</button>`).join('') || '<span class="muted">No houses yet.</span>'}</div>
       <label>What matters most to you?<input id="prio" value="${esc(cfg('housePriorities') || '')}" placeholder="Budget under ₹45k, <30 min to office, lots of light, pet friendly"></label>
-      <div class="row wrap"><button class="btn primary" id="gen" ${aiReady() ? '' : 'disabled'}>✨ Write report with Claude</button><button class="btn" onclick="window.print()">🖨️ Print / save PDF</button></div>
-      ${aiReady() ? '' : '<p class="hint">Add a Claude API key in Settings for the written analysis. The comparison table below works without it.</p>'}
+      <div class="row wrap"><button class="btn primary" id="gen" ${aiReady() ? '' : 'disabled'}>✨ Write report with ${aiName()}</button><button class="btn" onclick="window.print()">🖨️ Print / save PDF</button></div>
+      ${aiReady() ? '' : '<p class="hint">Add a Claude or Gemini API key in Settings for the written analysis. The comparison table below works without it.</p>'}
     </div>
     <div id="ai-report">${last ? `<div class="card report"><small class="muted">Generated ${fmtDate(last.date)}</small>${md(last.text)}</div>` : ''}</div>
     <div id="static-report"></div>`;

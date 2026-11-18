@@ -1,7 +1,7 @@
 // Smart capture ("Priya said she's craving ramen…") and bulk import of a big text dump.
 import { state, live, get, upsert, cfg } from '../state.js';
 import { $, $$, esc, setTitle, toast, catOptions, cat, CATS, today, go } from '../ui.js';
-import { aiReady, extractFacts, heuristicExtract } from '../ai.js';
+import { aiReady, aiName, modelFor, extractFacts, heuristicExtract } from '../ai.js';
 import { enqueue } from '../enrich.js';
 import { uploadRaw } from '../media.js';
 
@@ -87,7 +87,7 @@ export function renderCapture(el, { personId, text = '', onSaved } = {}) {
       <span class="grow"></span>
       <button class="btn primary" id="cap-go">Sort it out ✨</button>
     </div>
-    ${aiReady() ? '' : `<p class="hint">No Claude API key yet — I'll use simple keyword sorting. Add a key in <a href="#/settings">Settings</a> for smart sorting and web lookups.</p>`}
+    ${aiReady() ? '' : `<p class="hint">No AI key yet — I'll use simple keyword sorting. Add a key in <a href="#/settings">Settings</a> for smart sorting and web lookups.</p>`}
   </div>
   <div id="cap-review"></div>`;
 
@@ -207,7 +207,7 @@ export function importPage(view) {
   const ta = $('#im-text', view);
   const info = () => {
     const n = chunk(ta.value).length;
-    $('#im-info', view).textContent = ta.value ? `${ta.value.length.toLocaleString()} characters → ${n} batch${n === 1 ? '' : 'es'}${aiReady() ? ` (${n} Claude call${n === 1 ? '' : 's'} with ${cfg('smartModel')})` : ' (keyword sorting — add an API key for smart sorting)'}` : '';
+    $('#im-info', view).textContent = ta.value ? `${ta.value.length.toLocaleString()} characters → ${n} batch${n === 1 ? '' : 'es'}${aiReady() ? ` (${n} ${aiName()} call${n === 1 ? '' : 's'} with ${modelFor('smart')})` : ' (keyword sorting — add an API key for smart sorting)'}` : '';
   };
   ta.oninput = info;
   $('#im-file', view).onchange = async e => { const f = e.target.files[0]; if (f) { ta.value = await f.text(); info(); } };
@@ -225,7 +225,7 @@ export function importPage(view) {
     const work = async idx => {
       try {
         const r = aiReady()
-          ? await extractFacts(parts[idx], live('people'), { model: cfg('smartModel'), extraNames: [...extraNames] })
+          ? await extractFacts(parts[idx], live('people'), { tier: 'smart', extraNames: [...extraNames] })
           : heuristicExtract(parts[idx], live('people'), null);
         r.items.forEach(i => { i.source = 'import'; if (!i.person_id && i.person) extraNames.add(i.person); });
         all.items.push(...r.items); all.updates.push(...r.updates);
@@ -289,7 +289,7 @@ function bulkReview(el, { items, updates }) {
         </div>`).join('')}
     </details>`).join('')}
   <div class="card">
-    <label class="check"><input type="checkbox" id="bk-enrich" ${aiReady() ? '' : 'disabled'}> Also look up details online for foods, places, trips, books… (one extra Claude call each)</label>
+    <label class="check"><input type="checkbox" id="bk-enrich" ${aiReady() ? '' : 'disabled'}> Also look up details online for foods, places, trips, books… (one extra ${aiName()} call each)</label>
     <button class="btn primary block" id="bk-save">Save checked items</button>
   </div>`;
 

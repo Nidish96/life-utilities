@@ -104,7 +104,7 @@ export function docEdit(view, id) {
       <div class="files edit" id="df"></div>
       <div class="row"><label class="btn grow">📷 Snap<input type="file" id="df-cam" accept="image/*" capture="environment" hidden></label>
       <label class="btn grow">📎 Photos / PDF<input type="file" id="df-gal" accept="image/*,application/pdf" multiple hidden></label></div>
-      <div class="row"><small class="muted grow" id="df-status">${aiReady() ? 'Add a photo or PDF and I\'ll fill in the form.' : 'Add a Claude API key in Settings to auto-read documents.'}</small>
+      <div class="row"><small class="muted grow" id="df-status">${aiReady() ? 'Add a photo or PDF and I\'ll fill in the form.' : 'Add a Claude or Gemini API key in Settings to auto-read documents.'}</small>
       ${existing && aiReady() ? '<button class="btn ghost" id="df-reread">✨ Re-read</button>' : ''}</div>
     </div>
     <div class="card">

@@ -8,7 +8,7 @@ A personal web app built for your phone, with three parts:
 
 **Hosting:** the app is static files on GitHub Pages, with no build step and no server.
 **Storage:** your data lives in a folder called `LifeUtilities` in **your own Google Drive**. It holds `db.json` with all the records, plus a `media/` folder for photos and files.
-**AI:** the Claude API, called directly from your browser with your own API key.
+**AI:** your choice of **Claude** or **Gemini**, called directly from your browser with your own API key.
 
 ---
 
@@ -37,12 +37,16 @@ A personal web app built for your phone, with three parts:
    ```
    Commit that change. A client ID is not a secret, and putting it here means every device picks it up automatically.
 
-### 3. Turn on the AI features (Claude API key)
-1. Create a key at https://console.anthropic.com/settings/keys and add some credit.
-2. In the app, open **⚙️ Settings → Claude**, paste the key, and tap **Test**.
-3. Optionally tick **Sync key to my other devices**. The key is then saved inside your private Drive folder, so your laptop and phone both get it after you sign in.
+### 3. Turn on the AI features (Claude or Gemini)
+Pick either provider (you can switch any time):
+- **Gemini:** create a key at https://aistudio.google.com/apikey. Google AI Studio has a free tier, which is plenty for personal use.
+- **Claude:** create a key at https://console.anthropic.com/settings/keys and add some credit.
 
-**Never put the API key in `config.js`.** That file is public on GitHub Pages.
+Then open **⚙️ Settings → AI assistant**, tap **Claude** or **Gemini**, paste the key, and tap **Test**. Optionally tick **Sync keys to my other devices**. Your keys are then saved inside your private Drive folder, so your laptop and phone both get them after you sign in.
+
+**Never put an API key in `config.js`.** That file is public on GitHub Pages.
+
+Both providers do the same jobs: sorting notes, web lookups (Claude uses its web search tool, Gemini uses Google Search), ideas, house reports, and reading photos and PDFs of bills.
 
 ### 4. Add it to your phone's home screen
 Open the URL on your phone. On iPhone, tap Safari's **Share** button and choose **Add to Home Screen**. On Android, open Chrome's **⋮** menu and choose **Add to Home screen**. It then opens full-screen like a normal app.
@@ -65,7 +69,8 @@ Open the URL on your phone. On iPhone, tap Safari's **Share** button and choose 
 - **Deleting** a photo or file moves it to your Drive trash, so you can recover it for 30 days.
 - **Try it without Drive**: the welcome screen has "Start on this device". You can move everything, photos included, to Drive later under Settings.
 - **Backups**: Settings → **Export JSON**. Photos are already files in your Drive folder.
-- **Costs**: sorting a note uses the fast model (`claude-haiku-5-5`) and costs a fraction of a cent. Web lookups, bulk import (`claude-sonnet-5-5`), ideas, house reports and bill reading cost a little more. You can change both models in Settings.
+- **Models**: each provider has a "fast" model (sorting, lookups) and a "smart" one (bulk import, ideas, reports, bills). The defaults are `claude-haiku-5-5` / `claude-sonnet-5-5` for Claude and `gemini-flash-lite-latest` / `gemini-flash-latest` for Gemini. The `-latest` names automatically follow Google's newest Flash models. You can change any of them in Settings.
+- **Costs**: sorting a note costs a fraction of a cent on Claude and is usually free on Gemini's free tier. Note that Google may use free-tier requests to improve its products; the paid tier doesn't.
 - **Without an API key**, everything still works except the AI parts. Sorting falls back to simple keyword rules, and pictures come from Wikipedia.
 - Pictures come from Wikipedia and coordinates come from OpenStreetMap (both free). The maps use OpenStreetMap too.
 
@@ -78,7 +83,7 @@ js/config.js          ← your Google client ID goes here
 js/main.js            routing, boot, sync status
 js/state.js           data, settings, autosave
 js/storage.js         Google Drive + on-device backends, merging
-js/ai.js              Claude prompts, Wikipedia + OpenStreetMap lookups
+js/ai.js              Claude/Gemini calls and prompts, Wikipedia + OpenStreetMap lookups
 js/enrich.js          background lookup queue
 js/connect.js         sign-in, moving data to Drive
 js/views/*.js         home, people, capture/import, houses, docs, settings

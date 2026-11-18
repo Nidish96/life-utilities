@@ -1,8 +1,8 @@
 import { state, cfg, setLocal, setShared, live, markDirty, flush, emit } from '../state.js';
 import { mergeDb, normalize, preloadGoogle } from '../storage.js';
-import { $, esc, setTitle, toast, confirmDlg, download, today, go } from '../ui.js';
+import { $, $$, esc, setTitle, toast, confirmDlg, download, today, go } from '../ui.js';
 import { connectDrive, startLocal } from '../connect.js';
-import { testKey } from '../ai.js';
+import { testKey, provider } from '../ai.js';
 
 export function welcome(view) {
   setTitle('Life Utilities');
@@ -49,12 +49,21 @@ export function settingsPage(view) {
         <button class="btn" id="s-adv">Save</button></details>
     </div>
     <div class="card">
-      <h3>✨ Claude (AI)</h3>
-      <p class="small">Used to sort what you type, look things up on the web, suggest ideas, read bills and write house reports. Get a key at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>. The key is stored on this device${mode === 'drive' ? ' (and optionally in your private Drive folder so your other devices get it)' : ''} and only ever sent to Anthropic.</p>
-      <label>API key<input id="s-key" type="password" value="${esc(cfg('apiKey') || '')}" placeholder="sk-ant-…" autocomplete="off"></label>
-      ${mode === 'drive' ? `<label class="check"><input type="checkbox" id="s-sync" ${state.db.settings.apiKey ? 'checked' : ''}> Sync key to my other devices via my Drive folder</label>` : ''}
-      <div class="grid2"><label>Fast model <small>(sorting, lookups)</small><input id="s-fast" value="${esc(cfg('fastModel'))}"></label>
-      <label>Smart model <small>(bulk import, ideas, reports, bills)</small><input id="s-smart" value="${esc(cfg('smartModel'))}"></label></div>
+      <h3>✨ AI assistant</h3>
+      <p class="small">Sorts what you type, looks things up on the web, suggests ideas, reads bills and writes house reports. Pick one provider. Keys are stored on this device${mode === 'drive' ? ' (and optionally in your private Drive folder so your other devices get them)' : ''} and are only ever sent to that provider.</p>
+      <div class="seg block" id="s-prov"><button data-p="claude" class="${provider() === 'claude' ? 'on' : ''}">Claude</button><button data-p="gemini" class="${provider() === 'gemini' ? 'on' : ''}">Gemini</button></div>
+      <div id="s-claude" ${provider() === 'claude' ? '' : 'hidden'}>
+        <label>Claude API key <small>(<a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">get one</a>)</small><input id="s-key" type="password" value="${esc(cfg('apiKey') || '')}" placeholder="sk-ant-…" autocomplete="off"></label>
+        <div class="grid2"><label>Fast model <small>(sorting, lookups)</small><input id="s-fast" value="${esc(cfg('fastModel'))}"></label>
+        <label>Smart model <small>(import, ideas, reports, bills)</small><input id="s-smart" value="${esc(cfg('smartModel'))}"></label></div>
+      </div>
+      <div id="s-gemini" ${provider() === 'gemini' ? '' : 'hidden'}>
+        <label>Gemini API key <small>(<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">get one in Google AI Studio</a>)</small><input id="s-gkey" type="password" value="${esc(cfg('geminiKey') || '')}" placeholder="AIza…" autocomplete="off"></label>
+        <div class="grid2"><label>Fast model <small>(sorting, lookups)</small><input id="s-gfast" value="${esc(cfg('geminiFastModel'))}"></label>
+        <label>Smart model <small>(import, ideas, reports, bills)</small><input id="s-gsmart" value="${esc(cfg('geminiSmartModel'))}"></label></div>
+        <p class="hint">The <code>-latest</code> names always point to Google's newest Flash models. You can put a specific model here instead, e.g. <code>gemini-3.8-flash</code>.</p>
+      </div>
+      ${mode === 'drive' ? `<label class="check"><input type="checkbox" id="s-sync" ${state.db.settings.apiKey || state.db.settings.geminiKey ? 'checked' : ''}> Sync keys to my other devices via my Drive folder</label>` : ''}
       <div class="row"><button class="btn primary" id="s-savekey">Save</button><button class="btn" id="s-test">Test</button><span id="s-testout" class="small"></span></div>
     </div>
     <div class="card">
@@ -82,12 +91,20 @@ export function settingsPage(view) {
     catch (e) { toast(e.message, 6000); }
   });
   $('#s-adv').onclick = () => { setLocal('clientId', $('#s-cid2').value.trim()); setLocal('folderName', $('#s-folder').value.trim()); toast('Saved — reload the app to apply'); };
+  let prov = provider();
+  $$('#s-prov button').forEach(btn => btn.onclick = () => {
+    prov = btn.dataset.p;
+    $$('#s-prov button').forEach(x => x.classList.toggle('on', x === btn));
+    $('#s-claude').hidden = prov !== 'claude'; $('#s-gemini').hidden = prov !== 'gemini';
+  });
   $('#s-savekey').onclick = () => {
-    const key = $('#s-key').value.trim();
-    setLocal('apiKey', key);
+    const key = $('#s-key').value.trim(), gkey = $('#s-gkey').value.trim();
+    setLocal('apiKey', key); setLocal('geminiKey', gkey);
+    setShared('provider', prov);
     const sync = $('#s-sync')?.checked;
-    if (mode === 'drive') setShared('apiKey', sync ? key : '');
+    if (mode === 'drive') { setShared('apiKey', sync ? key : ''); setShared('geminiKey', sync ? gkey : ''); }
     setShared('fastModel', $('#s-fast').value.trim()); setShared('smartModel', $('#s-smart').value.trim());
+    setShared('geminiFastModel', $('#s-gfast').value.trim()); setShared('geminiSmartModel', $('#s-gsmart').value.trim());
     toast('Saved');
   };
   $('#s-test').onclick = async () => {
@@ -97,7 +114,7 @@ export function settingsPage(view) {
   };
   $('#s-savepers').onclick = () => { setShared('homeCity', $('#s-city').value.trim()); setShared('currency', $('#s-cur').value.trim() || '₹'); toast('Saved'); };
   $('#s-export').onclick = () => {
-    const db = structuredClone(state.db); delete db.settings.apiKey;
+    const db = structuredClone(state.db); delete db.settings.apiKey; delete db.settings.geminiKey;
     download(`life-utilities-backup-${today()}.json`, JSON.stringify(db, null, 1));
   };
   $('#s-import').onchange = async e => {

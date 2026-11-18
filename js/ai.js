@@ -1,15 +1,30 @@
-// Claude API calls (direct from the browser with your own key), plus free lookups
+// AI calls to Claude or Gemini (direct from the browser with your own key), plus free lookups
 // from Wikipedia (pictures) and OpenStreetMap Nominatim (coordinates).
 import { cfg } from './state.js';
 import { today } from './ui.js';
 import { blobToBase64 } from './media.js';
 
 const ENDPOINT = 'https://api.anthropic.com/v1/messages';
-export const aiReady = () => !!cfg('apiKey');
+const GEMINI = 'https://generativelanguage.googleapis.com/v1beta/models';
 
-export async function claude({ system, content, model, maxTokens = 4096, web = false, webUses = 3 }) {
-  if (!aiReady()) throw new Error('Add your Claude API key in Settings to use AI features.');
-  const body = { model: model || cfg('fastModel'), max_tokens: maxTokens, system, messages: [{ role: 'user', content }] };
+// Which AI provider is active: 'claude' or 'gemini'.
+export const provider = () => (cfg('provider') === 'gemini' ? 'gemini' : 'claude');
+export const aiName = () => (provider() === 'gemini' ? 'Gemini' : 'Claude');
+export const aiReady = () => !!(provider() === 'gemini' ? cfg('geminiKey') : cfg('apiKey'));
+// tier: 'fast' (sorting, lookups) or 'smart' (bulk import, ideas, reports, bills)
+export const modelFor = tier => provider() === 'gemini'
+  ? cfg(tier === 'smart' ? 'geminiSmartModel' : 'geminiFastModel')
+  : cfg(tier === 'smart' ? 'smartModel' : 'fastModel');
+
+// One entry point for both providers. `content` is a string or an array of
+// {type:'text'|'image'|'document', ...} blocks (Claude format); converted for Gemini.
+export async function ask(opts) {
+  if (!aiReady()) throw new Error(`Add your ${aiName()} API key in Settings to use AI features.`);
+  return provider() === 'gemini' ? gemini(opts) : claude(opts);
+}
+
+async function claude({ system, content, tier = 'fast', maxTokens = 4096, web = false, webUses = 3 }) {
+  const body = { model: modelFor(tier), max_tokens: maxTokens, system, messages: [{ role: 'user', content }] };
   if (web) body.tools = [{ type: 'web_search_20250305', name: 'web_search', max_uses: webUses }];
   const texts = [];
   for (let turn = 0; turn < 4; turn++) {
@@ -33,6 +48,32 @@ export async function claude({ system, content, model, maxTokens = 4096, web = f
     break;
   }
   return texts.join('\n');
+}
+
+async function gemini({ system, content, tier = 'fast', maxTokens = 4096, web = false }) {
+  const blocks = typeof content === 'string' ? [{ type: 'text', text: content }] : content;
+  const parts = blocks.map(b => b.type === 'text'
+    ? { text: b.text }
+    : { inline_data: { mime_type: b.source.media_type, data: b.source.data } });
+  const body = {
+    systemInstruction: { parts: [{ text: system }] },
+    contents: [{ role: 'user', parts }],
+    // newer Gemini models "think" before answering, which uses output tokens too
+    generationConfig: { maxOutputTokens: Math.max(maxTokens * 2, 4096) },
+  };
+  if (web) body.tools = [{ google_search: {} }];
+  const r = await fetch(`${GEMINI}/${encodeURIComponent(modelFor(tier))}:generateContent`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-goog-api-key': cfg('geminiKey') },
+    body: JSON.stringify(body),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j?.error?.message || `Gemini API error ${r.status}`);
+  if (j.promptFeedback?.blockReason) throw new Error('Gemini declined this request: ' + j.promptFeedback.blockReason);
+  const cand = j.candidates?.[0];
+  const text = (cand?.content?.parts || []).filter(p => p.text && !p.thought).map(p => p.text).join('\n');
+  if (!text) throw new Error('Gemini returned no answer' + (cand?.finishReason ? ` (${cand.finishReason})` : ''));
+  return text;
 }
 
 export function parseJson(text) {
@@ -68,7 +109,7 @@ Return ONLY JSON, no prose:
 {"items":[{"person":"Name","person_id":"id or null","category":"food","title":"…","detail":"…","tags":["…"],"searchable":true,"date":null}],
  "person_updates":[{"person":"Name","person_id":"id or null","birthday":null,"relation":null,"aliases":[]}]}`;
 
-export async function extractFacts(text, people, { defaultPerson, model, extraNames = [] } = {}) {
+export async function extractFacts(text, people, { defaultPerson, tier = 'fast', extraNames = [] } = {}) {
   const profiles = people.map(p => ({ id: p.id, name: p.name, aliases: p.aliases || [], relation: p.relation || undefined }));
   for (const n of extraNames) profiles.push({ id: null, name: n, note: 'new in this import' });
   const content = `Existing profiles: ${JSON.stringify(profiles)}
@@ -79,7 +120,7 @@ Notes:
 """
 ${text}
 """`;
-  const out = await claude({ system: EXTRACT_SYSTEM, content, model: model || cfg('fastModel'), maxTokens: 8000 });
+  const out = await ask({ system: EXTRACT_SYSTEM, content, tier, maxTokens: 8000 });
   const j = parseJson(out);
   if (!j) throw new Error('Could not understand the AI response. Try again.');
   return { items: Array.isArray(j.items) ? j.items : [], updates: Array.isArray(j.person_updates) ? j.person_updates : [] };
@@ -125,7 +166,7 @@ export function heuristicExtract(text, people, defaultPerson) {
 }
 
 /* ---------- 2. Look something up on the web ---------- */
-const enrichSystem = city => `You research one thing a person likes so the user can act on it later (visit, order, buy, book). Use web search to get accurate, current details. The user lives in ${city || 'an unspecified city'} — prefer suggestions there unless the item is clearly elsewhere.
+const enrichSystem = city => `You research one thing a person likes so the user can act on it later (visit, order, buy, book). Use web search (Google Search when available) to get accurate, current details. The user lives in ${city || 'an unspecified city'} — prefer suggestions there unless the item is clearly elsewhere.
 
 What to find, by category:
 - place: the exact venue — full address and coordinates, opening hours if easy to find.
@@ -143,10 +184,10 @@ Only include URLs you actually found. Be concise.`;
 export async function enrichItem(fact, person) {
   let e = {};
   if (aiReady()) {
-    const txt = await claude({
+    const txt = await ask({
       system: enrichSystem(cfg('homeCity')),
       content: `Person: ${person?.name || 'friend'}\nCategory: ${fact.category}\nItem: ${fact.title}\nContext: ${fact.detail || ''}`,
-      model: cfg('fastModel'), web: true, webUses: 3, maxTokens: 3000,
+      tier: 'fast', web: true, webUses: 3, maxTokens: 3000,
     });
     e = parseJson(txt) || { summary: txt.slice(0, 400) };
   }
@@ -212,7 +253,7 @@ ${person.birthday ? `Birthday: ${person.birthday}\n` : ''}Relation: ${person.rel
 What I know about ${person.name}:
 ${JSON.stringify(grouped, null, 1)}
 Recent shared memories: ${memories.slice(0, 8).map(m => m.title).join('; ') || 'none'}`;
-  const txt = await claude({ system, content, model: cfg('smartModel'), web, webUses: 4, maxTokens: 3000 });
+  const txt = await ask({ system, content, tier: 'smart', web, webUses: 4, maxTokens: 3000 });
   return parseJson(txt)?.ideas || [];
 }
 
@@ -228,7 +269,7 @@ Weigh the user's priorities heavily. Use the currency symbol ${cfg('currency')}.
     const { photos, id, createdAt, updatedAt, deleted, ...rest } = h;
     return { ...rest, photoCount: (photos || []).length };
   });
-  return claude({ system, content: `My priorities: ${priorities || 'not specified'}\n\nHomes:\n${JSON.stringify(data, null, 1)}`, model: cfg('smartModel'), maxTokens: 6000 });
+  return ask({ system, content: `My priorities: ${priorities || 'not specified'}\n\nHomes:\n${JSON.stringify(data, null, 1)}`, tier: 'smart', maxTokens: 6000 });
 }
 
 /* ---------- 5. Read a bill / prescription ---------- */
@@ -244,13 +285,13 @@ export async function extractDocument(files) {
     else content.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data } });
   }
   content.push({ type: 'text', text: `Extract the fields. Today is ${today()}.` });
-  const txt = await claude({ system: DOC_SYSTEM, content, model: cfg('smartModel'), maxTokens: 3000 });
+  const txt = await ask({ system: DOC_SYSTEM, content, tier: 'smart', maxTokens: 3000 });
   const j = parseJson(txt);
   if (!j) throw new Error('Could not read that document.');
   return j;
 }
 
 export async function testKey() {
-  const t = await claude({ system: 'Reply with the single word OK.', content: 'ping', maxTokens: 10 });
+  const t = await ask({ system: 'Reply with the single word OK.', content: 'ping', maxTokens: 50 });
   return t.trim();
 }
