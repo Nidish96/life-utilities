@@ -133,6 +133,58 @@ export async function lightbox(fid) {
   } catch (e) { $('.lightbox', s.el).textContent = 'Could not load photo: ' + e.message; }
 }
 
+// Full-screen photo viewer: swipe (or ← →) through a set of photos, double-tap to zoom.
+// photos: [{ f: fullFileId, t?: thumbFileId }]
+export function gallery(photos, start = 0) {
+  if (!photos.length) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'gal';
+  wrap.setAttribute('role', 'dialog');
+  wrap.innerHTML = `<div class="gal-top"><span class="gal-n"></span><span class="grow"></span>
+      <a class="gal-btn" id="gal-dl" download="photo.jpg" aria-label="Download">⬇</a><button class="gal-btn" id="gal-x" aria-label="Close">✕</button></div>
+    <div class="gal-track">${photos.map((p, i) => `<div class="gal-slide" data-i="${i}"><img alt="" draggable="false"></div>`).join('')}</div>
+    ${photos.length > 1 ? '<button class="gal-nav prev" aria-label="Previous">‹</button><button class="gal-nav next" aria-label="Next">›</button>' : ''}`;
+  document.body.appendChild(wrap);
+  document.body.classList.add('noscroll');
+  const track = $('.gal-track', wrap), slides = $$('.gal-slide', wrap);
+  const loaded = new Set();
+  const load = async i => {
+    if (i < 0 || i >= photos.length || loaded.has(i)) return;
+    loaded.add(i);
+    const img = $('img', slides[i]);
+    try {
+      if (photos[i].t) img.src = await state.backend.fileUrl(photos[i].t); // quick preview
+      const full = await state.backend.fileUrl(photos[i].f);
+      img.src = full;
+      if (i === cur) $('#gal-dl', wrap).href = full;
+    } catch { slides[i].classList.add('broken'); }
+  };
+  let cur = -1;
+  const show = i => {
+    i = Math.max(0, Math.min(photos.length - 1, i));
+    if (i === cur) return;
+    cur = i;
+    $('.gal-n', wrap).textContent = `${i + 1} / ${photos.length}`;
+    [i, i + 1, i - 1, i + 2].forEach(load);
+    const src = $('img', slides[i]).src; if (src) $('#gal-dl', wrap).href = src;
+    slides.forEach(s => s.classList.remove('zoom'));
+  };
+  const go = i => track.scrollTo({ left: Math.max(0, Math.min(photos.length - 1, i)) * track.clientWidth, behavior: 'smooth' });
+  track.addEventListener('scroll', () => show(Math.round(track.scrollLeft / track.clientWidth)), { passive: true });
+  const close = () => { wrap.remove(); document.removeEventListener('keydown', key); if (!$('.sheet-wrap')) document.body.classList.remove('noscroll'); };
+  const key = e => { if (e.key === 'Escape') close(); else if (e.key === 'ArrowRight') go(cur + 1); else if (e.key === 'ArrowLeft') go(cur - 1); };
+  document.addEventListener('keydown', key);
+  $('#gal-x', wrap).onclick = close;
+  $('.prev', wrap)?.addEventListener('click', () => go(cur - 1));
+  $('.next', wrap)?.addEventListener('click', () => go(cur + 1));
+  slides.forEach(s => s.addEventListener('dblclick', e => {
+    const z = !s.classList.contains('zoom');
+    s.classList.toggle('zoom', z);
+    if (z) { const img = $('img', s); requestAnimationFrame(() => { s.scrollLeft = (img.offsetWidth - s.clientWidth) * (e.offsetX / s.clientWidth); s.scrollTop = (img.offsetHeight - s.clientHeight) * (e.offsetY / s.clientHeight); }); }
+  }));
+  requestAnimationFrame(() => { track.scrollLeft = start * track.clientWidth; show(start); });
+}
+
 export const mapsLink = ({ lat, lng, q }) =>
   lat && lng ? `https://www.google.com/maps/search/?api=1&query=${lat},${lng}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q || '')}`;
 export function mapEmbed(lat, lng) {
