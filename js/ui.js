@@ -62,7 +62,7 @@ export function openSheet(html, { onClose, wide } = {}) {
 export function confirmDlg(msg, yes = 'Delete') {
   return new Promise(res => {
     const s = openSheet(`<p class="lead">${esc(msg)}</p><div class="row"><button class="btn grow" data-a="no">Cancel</button><button class="btn danger grow" data-a="yes">${esc(yes)}</button></div>`, { onClose: () => res(false) });
-    $$('[data-a]', s.el).forEach(b => b.onclick = () => { const v = b.dataset.a === 'yes'; s.close(); res(v); });
+    $$('[data-a]', s.el).forEach(b => b.onclick = () => { const v = b.dataset.a === 'yes'; res(v); s.close(); });
   });
 }
 

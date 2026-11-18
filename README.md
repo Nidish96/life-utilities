@@ -66,6 +66,8 @@ Open the URL on your phone. On iPhone, tap Safari's **Share** button and choose 
 
 ## Good to know
 
+- **App lock (passcode / Face ID)**: Settings → **🔒 App lock**. Set a passcode (4+ characters; digits-only gives you a number pad), and optionally unlock with Face ID or your fingerprint. Choose when it locks after you leave the app: immediately, or after 1, 5 or 15 minutes. After 5 wrong tries it makes you wait, and the wait gets longer each time. The lock applies **per device**, so turn it on separately on your phone and laptop. The passcode itself is never stored, only a salted hash. **Forgot it?** Tap *Forgot passcode?* on the lock screen to erase this device's copy of the app. Drive data is untouched; you just sign in again. In on-device mode this deletes your data, so export a backup first. This is a screen lock that keeps out someone who picks up your phone. It does not encrypt the data your browser keeps for offline use.
+
 - **Google sign-in lasts about an hour.** This is a limit of browser-only Google sign-in. When it expires, the top bar shows "⚠️ Tap to reconnect Drive". You can keep working in the meantime: edits are cached on the phone and sync once you tap it.
 - **Several devices**: each save checks whether another device has saved since, and if so merges the two record by record (the newest edit wins).
 - **Deleting** a photo or file moves it to your Drive trash, so you can recover it for 30 days.
@@ -88,6 +90,7 @@ js/storage.js         Google Drive + on-device backends, merging
 js/ai.js              Claude/Gemini calls and prompts, Wikipedia + OpenStreetMap lookups
 js/enrich.js          background lookup queue
 js/connect.js         sign-in, moving data to Drive
+js/lock.js            app lock screen (passcode, Face ID / fingerprint, auto-lock)
 js/views/*.js         home, people, capture/import, houses, docs, reimbursements, settings
 ```
 

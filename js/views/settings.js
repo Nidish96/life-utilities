@@ -3,6 +3,7 @@ import { mergeDb, normalize, preloadGoogle } from '../storage.js';
 import { $, $$, esc, setTitle, toast, confirmDlg, download, today, go } from '../ui.js';
 import { connectDrive, startLocal } from '../connect.js';
 import { testKey, provider } from '../ai.js';
+import { lockSettingsHtml, wireLockSettings } from '../lock.js';
 
 export function welcome(view) {
   setTitle('Life Utilities');
@@ -30,7 +31,7 @@ export function welcome(view) {
   $('#w-local').onclick = async () => { await startLocal(); go('#/'); emit('route'); };
 }
 
-export function settingsPage(view) {
+export async function settingsPage(view) {
   setTitle('Settings', true);
   const b = state.backend;
   const mode = cfg('mode');
@@ -77,12 +78,17 @@ export function settingsPage(view) {
       <p class="small">${count} records. Export downloads everything except photos as one JSON file. Import merges a backup into what's here.</p>
       <div class="row wrap"><button class="btn" id="s-export">⬇ Export JSON</button><label class="btn">⬆ Import JSON<input type="file" id="s-import" accept=".json,application/json" hidden></label></div>
     </div>
+    <div class="card" id="s-lock">
+      <h3>🔒 App lock</h3>
+      ${await lockSettingsHtml()}
+    </div>
     <div class="card">
       <h3>This device</h3>
       <button class="btn danger" id="s-forget">Sign out & forget this device</button>
-      <p class="hint">Removes the saved key, sign-in and cached data from this browser. Your Drive data is untouched.</p>
+      <p class="hint">Removes the saved key, sign-in, app lock and cached data from this browser. Your Drive data is untouched.</p>
     </div>`;
 
+  wireLockSettings($('#s-lock'), () => settingsPage(view));
   $('#s-reconnect')?.addEventListener('click', async () => { try { await connectDrive(); toast('Connected'); settingsPage(view); } catch (e) { toast(e.message, 5000); } });
   $('#s-todrive')?.addEventListener('click', async () => {
     const cid = $('#s-cid').value.trim(); if (cid) setLocal('clientId', cid);
@@ -128,7 +134,7 @@ export function settingsPage(view) {
   $('#s-forget').onclick = async () => {
     if (!(await confirmDlg('Forget this device? Unsynced changes will be lost.', 'Forget'))) return;
     state.backend?.signOut?.();
-    ['lu.settings', 'lu.tok', 'lu.cache', 'lu.dirty'].forEach(k => localStorage.removeItem(k));
+    ['lu.settings', 'lu.tok', 'lu.cache', 'lu.dirty', 'lu.lock', 'lu.lockfail'].forEach(k => localStorage.removeItem(k));
     location.hash = '#/'; location.reload();
   };
 }
