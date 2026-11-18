@@ -1,6 +1,7 @@
-import { live, get, upsert, remove, cfg, setShared } from '../state.js';
+import { live, get, upsert, remove, cfg, setShared, on } from '../state.js';
 import { $, $$, esc, setTitle, openSheet, confirmDlg, toast, photoImg, hydrate, fmtDate, fmtMoney, stars, mapEmbed, mapsLink, md, today, go } from '../ui.js';
-import { uploadPhotos, deletePhotos } from '../media.js';
+import { deletePhotos } from '../media.js';
+import { addUploads, cancel, retry, handOff, attachedSince, pendingFor, withSigs } from '../uploads.js';
 import { aiReady, aiName, houseReport, geocode, reverseGeocode } from '../ai.js';
 
 const STATUS = {
@@ -69,7 +70,9 @@ export function houseDetail(view, id) {
   setTitle(h.title || 'House', true);
   const checks = Object.entries(h.checks || {});
   view.innerHTML = `
-    ${h.photos?.length ? `<div class="carousel">${h.photos.map(ph => photoImg(ph, 'cimg')).join('')}</div>` : ''}
+    ${h.photos?.length ? `<div class="carousel" data-gallery>${h.photos.map(ph => photoImg(ph, 'cimg')).join('')}</div>
+      <p class="small muted center">📷 ${h.photos.length} photo${h.photos.length === 1 ? '' : 's'} · swipe, or tap one to view full screen</p>` : ''}
+    ${pendingFor('houses', id).length ? `<div class="card upbox"><b>⬆️ ${pendingFor('houses', id).length} photo${pendingFor('houses', id).length === 1 ? '' : 's'} still uploading…</b><div class="small muted">They'll appear here as each one finishes.</div></div>` : ''}
     <div class="row"><h2 class="grow">${esc(h.title || 'Untitled')}</h2><a class="btn" href="#/h/${id}/edit">✏️ Edit</a></div>
     <div class="chips">${Object.entries(STATUS).map(([k, v]) => `<button class="chip ${h.status === k ? 'on' : ''}" data-s="${k}">${v.e} ${v.l}</button>`).join('')}</div>
     <div class="grid2 card">
@@ -99,22 +102,34 @@ export function houseDetail(view, id) {
   };
   hydrate(view);
 }
+on('photo-attached', t => {
+  if (t.coll !== 'houses' || location.hash !== '#/h/' + t.id || document.querySelector('.sheet-wrap, .gal')) return;
+  const view = document.getElementById('view'), x = view.querySelector('.carousel')?.scrollLeft || 0, y = window.scrollY;
+  houseDetail(view, t.id);
+  const c = view.querySelector('.carousel'); if (c) c.scrollLeft = x; window.scrollTo(0, y);
+});
+on('uploads', () => {
+  const m = location.hash.match(/^#\/h\/([^/]+)$/);
+  if (m && !document.querySelector('.sheet-wrap, .gal') && !pendingFor('houses', m[1]).length) document.querySelector('.upbox')?.remove();
+});
 const kv = (k, v, raw) => (v ? `<div><small class="muted">${k}</small><div>${raw ? v : esc(v)}</div></div>` : '');
 
 /* ---------------- add / edit ---------------- */
 export function houseEdit(view, id) {
   const existing = id && id !== 'new' ? get('houses', id) : null;
   const h = existing ? structuredClone(existing) : { status: 'visited', deal: cfg('lastDeal') || 'rent', visitedOn: today(), photos: [], checks: {}, rating: 0 };
-  const added = [];
+  const added = [];      // photos uploaded while this form is open
+  const mine = [];       // upload jobs started from this form
+  const openedAt = Date.now();
   let saved = false;
   setTitle(existing ? 'Edit house' : 'New house', true);
   const f = (k, label, type = 'text', extra = '') => `<label>${label}<input data-k="${k}" type="${type}" value="${esc(h[k] ?? '')}" ${extra}></label>`;
   view.innerHTML = `
     <div class="card">
+      <div id="hp-prog"></div>
       <div class="photos edit" id="hp"></div>
       <div class="row"><label class="btn grow">📷 Camera<input type="file" id="hp-cam" accept="image/*" capture="environment" hidden></label>
       <label class="btn grow">🖼️ Gallery<input type="file" id="hp-gal" accept="image/*" multiple hidden></label></div>
-      <small class="muted" id="hp-status"></small>
     </div>
     <div class="card">
       ${f('title', 'Name it', 'text', 'placeholder="e.g. 2BHK near Indiranagar metro"')}
@@ -147,24 +162,55 @@ export function houseEdit(view, id) {
       <datalist id="roles"><option>Owner</option><option>Broker</option><option>Builder</option><option>Society manager</option></datalist></div>
     <button class="btn primary block big" id="h-save">Save house</button>`;
 
+  const background = existing ? pendingFor('houses', existing.id) : []; // still uploading from an earlier save
+  const active = () => mine.filter(j => j.status !== 'cancelled' && j.status !== 'done');
+  const drawProgress = () => {
+    const batch = mine.filter(j => j.status !== 'cancelled'), bg = background.filter(j => j.status === 'queued' || j.status === 'working');
+    const done = batch.filter(j => j.status === 'done').length, failed = batch.filter(j => j.status === 'error').length;
+    const busy = batch.length - done - failed;
+    $('#hp-prog').innerHTML = busy || failed || bg.length ? `<div class="upbox">
+      ${busy ? `<div class="row"><b class="grow">⬆️ Uploading ${done + 1 > batch.length ? batch.length : done + 1} of ${batch.length - failed}</b><span class="small muted">${done} done</span></div>
+        <div class="bar"><span style="width:${Math.round(done / Math.max(1, batch.length - failed) * 100)}%"></span></div>
+        <div class="small muted">You can save now — the rest keep uploading in the background.</div>` : ''}
+      ${failed ? `<div class="small warn">⚠️ ${failed} photo${failed === 1 ? '' : 's'} failed — tap ↻ on ${failed === 1 ? 'it' : 'them'} to retry.</div>` : ''}
+      ${bg.length ? `<div class="small muted">⬆️ ${bg.length} photo${bg.length === 1 ? '' : 's'} from earlier still uploading in the background.</div>` : ''}</div>`
+      : batch.length && done ? `<div class="small muted">✅ ${done} photo${done === 1 ? '' : 's'} uploaded</div>` : '';
+  };
   const drawPhotos = () => {
-    $('#hp').innerHTML = h.photos.map((ph, i) => `<div class="ph">${photoImg(ph)}${i === 0 ? '<span class="cover">cover</span>' : `<button class="icon ph-star" data-i="${i}" title="Make cover">★</button>`}<button class="icon ph-x" data-i="${i}">✕</button></div>`).join('');
-    $$('#hp .ph-x').forEach(b => b.onclick = () => { h.photos.splice(+b.dataset.i, 1); drawPhotos(); });
+    $('#hp').innerHTML = h.photos.map((ph, i) => `<div class="ph">${photoImg(ph)}${i === 0 ? '<span class="cover">cover</span>' : `<button class="icon ph-star" data-i="${i}" title="Make cover">★</button>`}<button class="icon ph-x" data-i="${i}">✕</button></div>`).join('') +
+      active().map(j => `<div class="ph up ${j.status}"><img class="thumb" src="${j.preview}" alt="">
+        <span class="up-ov">${j.status === 'error' ? `<button class="icon up-retry" data-j="${j.id}" title="${esc(j.error || '')}">↻</button>` : `<i class="up-spin"></i><small>${j.status === 'queued' ? 'Waiting' : esc(j.stage.replace('…', ''))}</small>`}</span>
+        <button class="icon ph-x" data-j="${j.id}" title="Cancel">✕</button></div>`).join('');
+    $$('#hp .ph-x[data-i]').forEach(b => b.onclick = () => { h.photos.splice(+b.dataset.i, 1); drawPhotos(); });
+    $$('#hp .ph-x[data-j]').forEach(b => b.onclick = () => { cancel(mine.find(j => j.id === +b.dataset.j)); drawPhotos(); });
+    $$('#hp .up-retry').forEach(b => b.onclick = () => { retry(mine.find(j => j.id === +b.dataset.j)); drawPhotos(); });
     $$('#hp .ph-star').forEach(b => b.onclick = () => { const [p] = h.photos.splice(+b.dataset.i, 1); h.photos.unshift(p); drawPhotos(); });
     hydrate($('#hp'));
+    drawProgress();
   };
+  let pending = 0;
+  const owner = {
+    onDone: j => { if (saved) return; h.photos.push(j.result); added.push(j.result); },
+    onChange: () => { if (saved || !document.body.contains($('#hp') || null)) return; cancelAnimationFrame(pending); pending = requestAnimationFrame(drawPhotos); },
+  };
+  for (const j of background) j.owner = { onChange: () => { if (!saved && $('#hp')) drawProgress(); } };
   drawPhotos();
-  const onFiles = async e => {
+  // Skip photos already in this house or already picked in this session.
+  const known = () => new Set([...h.photos.map(p => p.s), ...mine.filter(j => j.status !== 'cancelled').map(j => j.sig), ...background.map(j => j.sig)].filter(Boolean));
+  const start = items => { if (items.length) { mine.push(...addUploads(items, { owner })); drawPhotos(); } };
+  $('#hp-cam').onchange = async e => {
+    const items = await withSigs([...e.target.files]); e.target.value = '';
+    const fresh = items.filter(i => !known().has(i.sig));
+    if (items.length && !fresh.length) toast('That photo is already added');
+    start(fresh);
+  };
+  $('#hp-gal').onchange = async e => {
     const files = [...e.target.files]; e.target.value = '';
     if (!files.length) return;
-    const st = $('#hp-status'); const save = $('#h-save'); save.disabled = true;
-    try {
-      const ph = await uploadPhotos(files, (i, n) => st.textContent = `Uploading ${i}/${n}…`);
-      h.photos.push(...ph); added.push(...ph); st.textContent = `${h.photos.length} photo(s)`; drawPhotos();
-    } catch (err) { st.textContent = 'Upload failed: ' + err.message; }
-    save.disabled = false;
+    const items = await withSigs(files), k = known();
+    if (items.length === 1 && !k.has(items[0].sig)) return start(items);
+    choosePhotos(items, k, start);
   };
-  $('#hp-cam').onchange = onFiles; $('#hp-gal').onchange = onFiles;
   $$('#deal button').forEach(b => b.onclick = () => { h.deal = b.dataset.d; $$('#deal button').forEach(x => x.classList.toggle('on', x === b)); priceHint(); });
   const priceHint = () => { const v = $('[data-k="price"]').value; $('#price-hint').textContent = v ? `= ${fmtMoney(v)}${h.deal === 'rent' ? '/mo' : ''}` : ''; };
   $('[data-k="price"]').addEventListener('input', priceHint); priceHint();
@@ -195,14 +241,45 @@ export function houseEdit(view, id) {
     $$('[data-k]', view).forEach(i => { const k = i.dataset.k; let v = i.value.trim(); if (i.type === 'number') v = v === '' ? null : +v; h[k] = v; });
     if (!h.title) h.title = [h.bhk, h.locality].filter(Boolean).join(' in ') || 'Untitled house';
     setShared('lastDeal', h.deal);
+    if (existing) { const have = new Set(h.photos.map(p => p.f)); h.photos.push(...attachedSince('houses', existing.id, openedAt).filter(p => !have.has(p.f))); }
     saved = true;
     const r = upsert('houses', h);
-    toast('Saved'); go('#/h/' + r.id);
+    const still = active().filter(j => j.status !== 'error');
+    handOff(mine, 'houses', r.id);
+    toast(still.length ? `Saved — ${still.length} photo${still.length === 1 ? '' : 's'} still uploading in the background` : 'Saved', still.length ? 4000 : 2800);
+    go('#/h/' + r.id);
   };
-  // discard photos uploaded for an unsaved form
-  const leave = () => { if (!saved) deletePhotos(added); window.removeEventListener('hashchange', leave); };
+  // leaving without saving: stop uploads and discard photos uploaded for this form
+  const leave = () => {
+    if (!saved) { mine.forEach(cancel); deletePhotos(added); }
+    for (const j of background) if (j.owner && !j.owner.onDone) j.owner = null;
+    window.removeEventListener('hashchange', leave);
+  };
   window.addEventListener('hashchange', leave);
 }
+// Pick which of the selected photos to upload; ones already added are marked and unticked.
+function choosePhotos(picked, known, start) {
+  const items = picked.map(x => ({ ...x, url: URL.createObjectURL(x.file), dupe: known.has(x.sig) }));
+  const seen = new Set();
+  for (const it of items) { if (seen.has(it.sig)) it.dupe = true; seen.add(it.sig); it.on = !it.dupe; }
+  const s = openSheet(`<h3>Choose photos</h3><p class="small muted" id="cp-sub"></p>
+    <div class="pick">${items.map((it, i) => `<button class="pick-i ${it.on ? 'on' : ''} ${it.dupe ? 'dupe' : ''}" data-i="${i}"><img src="${it.url}" alt=""><span class="pick-c">✓</span>${it.dupe ? '<small>Already added</small>' : ''}</button>`).join('')}</div>
+    <div class="row pick-bar"><button class="btn ghost" id="cp-all">Select all</button><button class="btn ghost" id="cp-none">None</button><span class="grow"></span><button class="btn primary" id="cp-go"></button></div>`,
+  { wide: false, onClose: () => setTimeout(() => items.forEach(it => URL.revokeObjectURL(it.url)), 1000) });
+  const upd = () => {
+    const n = items.filter(i => i.on).length, d = items.filter(i => i.dupe).length;
+    $('#cp-go', s.el).textContent = n ? `⬆️ Upload ${n} photo${n === 1 ? '' : 's'}` : 'Nothing selected';
+    $('#cp-go', s.el).disabled = !n;
+    $('#cp-sub', s.el).textContent = `${n} of ${items.length} selected — tap a photo to include or leave it out.${d ? ` ${d} already added, so left out.` : ''}`;
+    $$('.pick-i', s.el).forEach(b => b.classList.toggle('on', items[+b.dataset.i].on));
+  };
+  $$('.pick-i', s.el).forEach(b => b.onclick = () => { const it = items[+b.dataset.i]; it.on = !it.on; upd(); });
+  $('#cp-all', s.el).onclick = () => { items.forEach(i => i.on = !i.dupe); upd(); };
+  $('#cp-none', s.el).onclick = () => { items.forEach(i => i.on = false); upd(); };
+  $('#cp-go', s.el).onclick = () => { const pick = items.filter(i => i.on).map(({ file, sig }) => ({ file, sig })); s.close(); start(pick); };
+  upd();
+}
+
 const chk = (c, v) => `<button class="chip ${v === true ? 'yes' : v === false ? 'no' : ''}" data-c="${esc(c)}">${v === true ? '✓ ' : v === false ? '✕ ' : ''}${esc(c)}</button>`;
 
 /* ---------------- report ---------------- */

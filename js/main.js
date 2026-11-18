@@ -1,6 +1,7 @@
 import { state, cfg, on, setStatus, readCache, loadFromBackend, flush, isDirty } from './state.js';
 import { AuthNeeded } from './storage.js';
-import { $, esc, toast, lightbox, go } from './ui.js';
+import { $, esc, toast, gallery, go } from './ui.js';
+import { pendingJobs } from './uploads.js';
 import { makeBackend, connectDrive } from './connect.js';
 import { home } from './views/home.js';
 import { peopleList, personPage } from './views/people.js';
@@ -63,7 +64,7 @@ function renderStatus() {
   const el = $('#sync');
   const s = state.status;
   const local = state.backend?.kind === 'local';
-  const busy = state.busy ? `🔎 ${state.busy} · ` : '';
+  const busy = (state.uploading ? `⬆️ ${state.uploading} photo${state.uploading === 1 ? '' : 's'} · ` : '') + (state.busy ? `🔎 ${state.busy} · ` : '');
   const map = {
     idle: '', loading: state.statusMsg || '⟳ Loading…', saving: '⟳ Saving…', pending: '• Unsaved',
     saved: local ? '📱 On device' : '✓ Saved', auth: '⚠️ Tap to reconnect Drive', error: '⚠️ Sync problem',
@@ -89,7 +90,12 @@ $('#sync').addEventListener('click', async () => {
 $('#back').addEventListener('click', () => (history.length > 1 ? history.back() : go('#/')));
 document.addEventListener('click', e => {
   const img = e.target.closest('img[data-full]');
-  if (img && !e.target.closest('a')) { e.preventDefault(); lightbox(img.dataset.full); }
+  if (!img || e.target.closest('a')) return;
+  e.preventDefault();
+  // open every photo in the same strip/grid, starting at the one tapped
+  const box = img.closest('[data-gallery], .carousel, .photos, .files') || img.parentElement;
+  const imgs = [...box.querySelectorAll('img[data-full]')];
+  gallery(imgs.map(x => ({ f: x.dataset.full, t: x.dataset.fid !== x.dataset.full ? x.dataset.fid : null })), Math.max(0, imgs.indexOf(img)));
 });
 
 on('status', renderStatus);
@@ -102,7 +108,10 @@ on('remote-change', () => {
   route();
 });
 window.addEventListener('hashchange', route);
-window.addEventListener('beforeunload', e => { if (isDirty() && state.status !== 'auth') { flush(); } });
+window.addEventListener('beforeunload', e => {
+  if (isDirty() && state.status !== 'auth') { flush(); }
+  if (pendingJobs().length) { e.preventDefault(); e.returnValue = ''; } // photos still uploading
+});
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
 
 async function boot() {

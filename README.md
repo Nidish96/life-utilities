@@ -62,7 +62,7 @@ Open the URL on your phone. On iPhone, tap Safari's **Share** button and choose 
 - **Duplicates**: when you save something that matches what you already have for that person, the review screen tells you ("Already saved" or "Looks similar to …"). Exact repeats start out skipped, and you can choose **Skip**, **Add to existing** (adds the new details to the old item) or **Save as new**. It also warns when something clashes with a dislike, e.g. "loves coriander chutney" when you'd saved "hates coriander". Matching runs on the phone (it ignores plurals, filler words and small typos), so it works without an AI key. Bulk import uses the same matching.
 - **Plan tab**: pick 🎂 Birthday, 🎁 Gift, 🍽️ Food, 🗺️ Go out or 🎲 Surprise, then tap **Shuffle**. You get three random picks from what you've saved. Things marked "✓ done/gifted" are skipped. **Fresh ideas from Claude** suggests new ideas based on the whole profile, optionally with live web search near your home city (set it in Settings).
 - **Home → Quick spin**: pick a person (or 🎲 for a random one) and an occasion, all in one tap.
-- **Houses**: tap ＋ during a viewing, use **📷 Camera** and **📍 I'm here now**, and fill in what you can. Tap a checklist chip once for ✓, twice for ✕, three times to clear it. **📄 Summary report** gives a side-by-side table, photos, and a written report from Claude based on your priorities. Use **🖨️ Print** to save it as a PDF.
+- **Houses**: tap ＋ during a viewing, use **📷 Camera** and **📍 I'm here now**, and fill in what you can. With **🖼️ Gallery** you first choose which photos to upload; ones you've already added are recognised and left out. Each photo appears straight away with its own progress, and a bar shows the overall progress. You can tap **Save house** while photos are still uploading: they keep going in the background (⬆️ in the top bar) and show up on the house as they finish. Tap any photo to open a full-screen viewer: swipe or use ← → to move between photos, and double-tap to zoom. Tap a checklist chip once for ✓, twice for ✕, three times to clear it. **📄 Summary report** gives a side-by-side table, photos, and a written report from Claude based on your priorities. Use **🖨️ Print** to save it as a PDF.
 - **Docs**: tap ＋, **📷 Snap** or attach a PDF, check the form Claude filled in, and save.
 - **Reimbursements**: Docs → **💸 Reimbursements** (also shown under *Heads up* on Home). Each claim has one-tap buttons for the next step: **Mark submitted** (with an optional reference number), then **Got paid** (enter the amount if it was less than you claimed) or **Rejected**. Filter by status or by who pays, and use **⬇ CSV** to export what's on screen.
 
@@ -92,6 +92,7 @@ js/storage.js         Google Drive + on-device backends, merging
 js/ai.js              Claude/Gemini calls and prompts, Wikipedia + OpenStreetMap lookups
 js/enrich.js          background lookup queue
 js/connect.js         sign-in, moving data to Drive
+js/uploads.js         background photo upload queue
 js/lock.js            app lock screen (passcode, Face ID / fingerprint, auto-lock)
 js/views/*.js         home, people, capture/import, houses, docs, reimbursements, settings
 ```
