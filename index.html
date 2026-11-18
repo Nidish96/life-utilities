@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f7f3ec" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#16130f" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Life">
+  <title>Life Utilities</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <button class="icon" id="back" aria-label="Back" style="display:none">‹</button>
+    <h1 id="title">Life Utilities</h1>
+    <button class="pill" id="sync"></button>
+    <a class="icon" href="#/settings" aria-label="Settings">⚙️</a>
+  </header>
+  <main id="view"></main>
+  <nav class="tabbar">
+    <a href="#/" data-tab="home"><span>🏡</span>Home</a>
+    <a href="#/people" data-tab="people"><span>💛</span>People</a>
+    <a href="#/add" data-tab="add" class="plus" aria-label="Capture"><span>＋</span></a>
+    <a href="#/houses" data-tab="houses"><span>🔑</span>Houses</a>
+    <a href="#/docs" data-tab="docs"><span>🧾</span>Docs</a>
+  </nav>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
