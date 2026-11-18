@@ -90,12 +90,12 @@ export function editPerson(p = null) {
 
 /* ---------------- person page ---------------- */
 let rerender = () => {};
-const TABS = { likes: '💛 Likes', graph: '🕸️ Graph', plan: '🎲 Plan', memories: '📸 Memories' };
+const TABS = { overview: '✨ Overview', likes: '💛 Likes', plan: '🎲 Plan', memories: '📸 Memories' };
 
-export function personPage(view, id, tab = 'likes', q = {}) {
+export function personPage(view, id, tab = 'overview', q = {}) {
   const p = get('people', id);
   if (!p) { view.innerHTML = '<div class="empty">Person not found.</div>'; return; }
-  if (!TABS[tab]) tab = 'likes';
+  if (!TABS[tab]) tab = 'overview'; // (old 'graph' links land here too)
   rerender = () => personPage(view, id, tab, q);
   setTitle(p.name, true);
   const d = daysUntil(p.birthday);
@@ -110,7 +110,7 @@ export function personPage(view, id, tab = 'likes', q = {}) {
     <button class="fab" id="padd" aria-label="Add">＋</button>`;
   $('#pedit').onclick = () => editPerson(p);
   const el = $('#ptab');
-  ({ likes: likesTab, graph: graphTab, plan: planTab, memories: memoriesTab })[tab](el, p, q);
+  ({ overview: overviewTab, likes: likesTab, plan: planTab, memories: memoriesTab })[tab](el, p, q);
   $('#padd').onclick = () => {
     if (tab === 'memories') return editMemory(null, p.id);
     const s = openSheet(`<h2>Add for ${esc(p.name)}</h2><div id="sheet-cap"></div>`);
@@ -129,7 +129,7 @@ function factCard(f) {
 }
 const bindFacts = el => $$('[data-fid-fact]', el).forEach(b => b.onclick = () => factSheet(b.dataset.fidFact));
 
-function likesTab(el, p) {
+function likesTab(el, p, q = {}) {
   const fs = live('facts').filter(f => f.personId === p.id).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   const avoid = fs.filter(f => f.category === 'dislike');
   const pending = fs.filter(f => f.searchable && !f.enrichment && f.enrichStatus !== 'pending');
@@ -139,10 +139,11 @@ function likesTab(el, p) {
     ${pending.length ? `<button class="btn ghost block" id="enrich-all">🔎 Look up details for ${pending.length} item${pending.length === 1 ? '' : 's'}</button>` : ''}
     ${Object.keys(CATS).filter(c => c !== 'dislike').map(c => {
       const list = fs.filter(f => f.category === c);
-      return list.length ? `<details class="catgroup" open><summary>${cat(c).e} ${cat(c).l} <small>${list.length}</small></summary><div class="facts">${list.map(factCard).join('')}</div></details>` : '';
+      return list.length ? `<details class="catgroup" open id="cat-${c}"><summary>${cat(c).e} ${cat(c).l} <small>${list.length}</small></summary><div class="facts">${list.map(factCard).join('')}</div></details>` : '';
     }).join('')}`;
   bindFacts(el);
   $$('.avoid a', el).forEach(a => a.addEventListener('click', e => e.preventDefault()));
+  if (q.c) setTimeout(() => $(`#cat-${q.c}`, el)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
   $('#enrich-all', el)?.addEventListener('click', () => { pending.forEach(f => enqueue(f.id)); toast(`Looking up ${pending.length} items…`); rerender(); });
 }
 
@@ -213,78 +214,56 @@ function editFact(f) {
   };
 }
 
-/* ---------------- interest graph ---------------- */
-function graphTab(el, p) {
-  const fs = live('facts').filter(f => f.personId === p.id);
-  if (!fs.length) { el.innerHTML = '<div class="empty">Add a few things first and the graph will grow here.</div>'; return; }
-  const cats = Object.keys(CATS).filter(c => fs.some(f => f.category === c));
-  const C = 500, R1 = 170, R2 = 330;
-  const weights = cats.map(c => Math.max(1.4, fs.filter(f => f.category === c).length));
-  const total = weights.reduce((a, b) => a + b, 0);
-  let a0 = -Math.PI / 2;
-  let edges = '', nodes = '', labels = '';
-  cats.forEach((c, ci) => {
-    const span = (weights[ci] / total) * Math.PI * 2;
-    const mid = a0 + span / 2;
-    const cx = C + R1 * Math.cos(mid), cy = C + R1 * Math.sin(mid);
-    const col = cat(c).c;
-    edges += `<line x1="${C}" y1="${C}" x2="${cx}" y2="${cy}" stroke="${col}" stroke-width="4" opacity=".5"/>`;
-    const list = fs.filter(f => f.category === c);
-    list.forEach((f, i) => {
-      const ang = a0 + span * (i + 0.5) / list.length;
-      const r = R2 + (list.length > 5 && i % 2 ? 55 : 0);
-      const x = C + r * Math.cos(ang), y = C + r * Math.sin(ang);
-      edges += `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="${col}" stroke-width="1.5" opacity=".45"/>`;
-      const right = Math.cos(ang) >= 0;
-      const t = f.title.length > 16 ? f.title.slice(0, 15) + '…' : f.title;
-      nodes += `<g class="gnode" data-fid-fact="${f.id}"><circle cx="${x}" cy="${y}" r="${f.enrichment?.image ? 20 : 13}" fill="${col}" ${f.done ? 'opacity=".45"' : ''}/>
-        ${f.enrichment?.image ? `<clipPath id="cp${f.id}"><circle cx="${x}" cy="${y}" r="14"/></clipPath><image href="${esc(f.enrichment.image)}" x="${x - 14}" y="${y - 14}" width="28" height="28" clip-path="url(#cp${f.id})" preserveAspectRatio="xMidYMid slice"/>` : ''}
-        <text x="${x + (right ? 22 : -22)}" y="${y + 10}" text-anchor="${right ? 'start' : 'end'}" class="glabel">${esc(t)}</text></g>`;
-    });
-    labels += `<g><circle cx="${cx}" cy="${cy}" r="30" fill="${col}"/><text x="${cx}" y="${cy + 9}" text-anchor="middle" font-size="26">${cat(c).e}</text>
-      <text x="${cx}" y="${cy + 50}" text-anchor="middle" class="gcat">${esc(cat(c).l)}</text></g>`;
-    a0 += span;
-  });
-  const center = `<circle cx="${C}" cy="${C}" r="46" fill="var(--ink)"/><text x="${C}" y="${C + 9}" text-anchor="middle" font-size="26" fill="var(--bg)" font-weight="700">${esc(p.name.split(' ')[0].slice(0, 8))}</text>`;
-  el.innerHTML = `<div class="graph card"><svg id="gsvg" viewBox="-180 -20 1360 1040" xmlns="http://www.w3.org/2000/svg">${edges}${labels}${nodes}${center}</svg>
-    <div class="gctl"><button class="icon" data-z="0.8">＋</button><button class="icon" data-z="1.25">－</button><button class="icon" data-z="0">⤾</button></div></div>
-    <div class="legend">${cats.map(c => `<span><i style="background:${cat(c).c}"></i>${cat(c).l} (${fs.filter(f => f.category === c).length})</span>`).join('')}</div>
-    <p class="hint">Tap a dot for details · drag to move · pinch or use ＋/－ to zoom.</p>`;
-  bindFacts(el);
-  panZoom($('#gsvg', el), el);
+/* ---------------- overview ---------------- */
+// A calm, at-a-glance profile built only from what you've saved (no AI needed).
+const listJoin = a => (a.length <= 1 ? a.join('') : `${a.slice(0, -1).join(', ')} and ${a[a.length - 1]}`);
+const factLink = f => `<a href="#" class="olink" data-fid-fact="${f.id}">${esc(f.title.length > 38 ? f.title.slice(0, 36) + '…' : f.title)}</a>`;
+function ago(ts) {
+  const d = Math.round((Date.now() - ts) / 864e5);
+  return d < 1 ? 'today' : d < 2 ? 'yesterday' : d < 31 ? `${d} days ago` : d < 365 ? `${Math.round(d / 30)} month${Math.round(d / 30) === 1 ? '' : 's'} ago` : `${Math.round(d / 365)} year${Math.round(d / 365) === 1 ? '' : 's'} ago`;
 }
 
-function panZoom(svg, root) {
-  const init = [-180, -20, 1360, 1040];
-  let vb = [...init];
-  const set = () => svg.setAttribute('viewBox', vb.join(' '));
-  const zoom = (k, cx = vb[0] + vb[2] / 2, cy = vb[1] + vb[3] / 2) => {
-    const w = Math.min(2400, Math.max(250, vb[2] * k)), h = w * init[3] / init[2];
-    vb = [cx - (cx - vb[0]) * w / vb[2], cy - (cy - vb[1]) * h / vb[3], w, h]; set();
-  };
-  $$('[data-z]', root).forEach(b => b.onclick = () => { const k = +b.dataset.z; if (!k) { vb = [...init]; set(); } else zoom(k); });
-  const pts = new Map(); let last = null, lastDist = null, moved = false;
-  svg.addEventListener('pointerdown', e => { pts.set(e.pointerId, e); last = e; moved = false; });
-  svg.addEventListener('pointermove', e => {
-    if (!pts.has(e.pointerId)) return;
-    pts.set(e.pointerId, e);
-    const scale = vb[2] / svg.clientWidth;
-    if (pts.size === 2) {
-      const [a, b] = [...pts.values()];
-      const d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
-      if (lastDist) zoom(lastDist / d);
-      lastDist = d; moved = true;
-    } else if (last) {
-      const dx = e.clientX - last.clientX, dy = e.clientY - last.clientY;
-      if (Math.abs(dx) + Math.abs(dy) > 3) moved = true;
-      if (moved) { vb[0] -= dx * scale; vb[1] -= dy * scale; set(); svg.setPointerCapture?.(e.pointerId); }
-      last = e;
-    }
-  });
-  const up = e => { pts.delete(e.pointerId); if (pts.size < 2) lastDist = null; last = null; };
-  svg.addEventListener('pointerup', up); svg.addEventListener('pointercancel', up);
-  svg.addEventListener('click', e => { if (moved) { e.stopPropagation(); e.preventDefault(); } }, true);
-  svg.addEventListener('wheel', e => { e.preventDefault(); zoom(e.deltaY > 0 ? 1.1 : 0.9); }, { passive: false });
+function overviewTab(el, p) {
+  const fs = live('facts').filter(f => f.personId === p.id).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const mems = live('memories').filter(m => m.personIds?.includes(p.id)).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  if (!fs.length && !mems.length) { el.innerHTML = `<div class="empty">Nothing saved for ${esc(p.name)} yet. Tap ＋ and type what they told you — this page turns it into a little portrait.</div>`; return; }
+  const first = esc(p.name.split(' ')[0]);
+  const likes = fs.filter(f => f.category !== 'dislike');
+  const avoid = fs.filter(f => f.category === 'dislike');
+  const open = likes.filter(f => !f.done);
+  const byCat = Object.keys(CATS).filter(c => c !== 'dislike' && c !== 'important_date')
+    .map(c => [c, likes.filter(f => f.category === c)]).filter(([, l]) => l.length).sort((a, b) => b[1].length - a[1].length);
+  const max = byCat[0]?.[1].length || 1;
+  const pick = cats => open.filter(f => cats.includes(f.category));
+  const favs = pick(['food', 'place', 'activity', 'hobby', 'music', 'movie_tv', 'book', 'fashion', 'other']).slice(0, 4);
+  const dreams = pick(['dream_vacation', 'long_held_desire']).slice(0, 3);
+  const gifts = pick(['gift_idea']);
+  const d = daysUntil(p.birthday);
+  const lastMem = mems[0];
+  const pics = likes.filter(f => f.enrichment?.image).slice(0, 6);
+
+  const lines = [
+    byCat.length && ['✨', `Mostly into ${listJoin(byCat.slice(0, 3).map(([c]) => `${cat(c).e} ${esc(cat(c).l.toLowerCase())}`))}`],
+    favs.length && ['💛', `Loves ${listJoin(favs.map(factLink))}`],
+    dreams.length && ['🌠', `Dreams of ${listJoin(dreams.map(factLink))}`],
+    gifts.length && ['🎁', `${gifts.length} gift idea${gifts.length === 1 ? '' : 's'} waiting: ${listJoin(gifts.slice(0, 3).map(factLink))}${gifts.length > 3 ? '…' : ''}`],
+    avoid.length && ['🚫', `<b>Avoid</b> ${listJoin(avoid.map(factLink))}`],
+    p.birthday && ['🎂', `Birthday ${fmtDate(p.birthday)}${d !== null ? ` · ${d === 0 ? '<b>today!</b>' : d <= 30 ? `<b>in ${d} days</b>` : `in ${d} days`}` : ''}`],
+    lastMem && ['📸', `Last memory together: <a href="#/p/${p.id}/memories">${esc(lastMem.title || 'Untitled')}</a>${lastMem.date ? `, ${ago(new Date(lastMem.date + 'T00:00').getTime())}` : ''}`],
+  ].filter(Boolean);
+
+  el.innerHTML = `
+    <div class="card ov-sum ${avoid.length ? '' : ''}">${lines.map(([e, t]) => `<div class="ov-line"><span>${e}</span><div>${t}</div></div>`).join('')}</div>
+    ${pics.length ? `<div class="ov-board ${pics.length < 3 ? 'few' : ''}">${pics.map((f, i) => `<button class="ov-pic ${i === 0 && pics.length >= 3 ? 'big' : ''}" data-fid-fact="${f.id}"><img src="${esc(f.enrichment.image)}" alt="" loading="lazy" referrerpolicy="no-referrer"><span>${esc(f.title)}</span></button>`).join('')}</div>` : ''}
+    ${byCat.length ? `<h3 class="section">Interests <small>${likes.length} things</small></h3>
+    <div class="card ov-bars">${byCat.map(([c, l]) => `<a class="ov-bar" href="#/p/${p.id}/likes?c=${c}" style="--c:${cat(c).c}">
+      <span class="ov-lbl">${cat(c).e} ${esc(cat(c).l)}</span><span class="ov-track"><i style="width:${Math.max(8, Math.round(l.length / max * 100))}%"></i></span><b>${l.length}</b></a>`).join('')}</div>` : ''}
+    ${fs.length > 3 ? `<h3 class="section">Recently added</h3><div class="facts">${fs.slice(0, 4).map(factCard).join('')}</div>` : ''}
+    ${lastMem?.photos?.length ? `<h3 class="section">Latest memory</h3><a class="card ov-mem" href="#/p/${p.id}/memories">${photoImg(lastMem.photos[0], 'ov-memimg')}<div><b>${esc(lastMem.title || '')}</b><div class="small muted">${fmtDate(lastMem.date)}</div></div></a>` : ''}`;
+  bindFacts(el);
+  $$('.olink', el).forEach(a => a.addEventListener('click', e => e.preventDefault()));
+  $$('.ov-pic img', el).forEach(img => img.addEventListener('error', () => { img.parentNode.hidden = true; }));
+  hydrate(el);
 }
 
 /* ---------------- planner ---------------- */

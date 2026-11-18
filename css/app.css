@@ -179,15 +179,30 @@ iframe.map { width: 100%; height: 200px; border: 0; border-radius: 12px; margin:
 .photostrip img { width: 76px; height: 76px; object-fit: cover; border-radius: 10px; display: block; background: var(--line); }
 .place { background: var(--bg); border-radius: 12px; padding: 10px; margin: 10px 0; }
 .sugs, .links { padding-left: 18px; } .sugs li { margin-bottom: 8px; }
-.graph { padding: 4px; position: relative; overflow: hidden; touch-action: none; }
-.graph svg { width: 100%; height: auto; display: block; aspect-ratio: 1360/1040; cursor: grab; }
-.glabel { font-size: 30px; fill: var(--ink); paint-order: stroke; stroke: var(--card); stroke-width: 4px; }
-.gcat { font-size: 26px; font-weight: 700; fill: var(--muted); paint-order: stroke; stroke: var(--card); stroke-width: 4px; }
-.gnode { cursor: pointer; }
-.gctl { position: absolute; right: 8px; top: 8px; display: flex; flex-direction: column; gap: 4px; }
-.gctl .icon { background: var(--card); border: 1px solid var(--line); border-radius: 10px; width: 36px; height: 36px; }
-.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--muted); }
-.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; }
+.ov-sum { display: grid; gap: 10px; padding: 16px; }
+.ov-line { display: flex; gap: 10px; align-items: baseline; line-height: 1.4; }
+.ov-line > span { flex: none; width: 22px; text-align: center; }
+.olink { color: inherit; text-decoration: none; font-weight: 600; border-bottom: 1px dashed color-mix(in srgb, var(--ink) 35%, transparent); }
+.ov-board { display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 104px; gap: 6px; margin: 0 0 6px; }
+.ov-board.few { grid-template-columns: repeat(2, 1fr); grid-auto-rows: 150px; }
+.ov-pic { position: relative; padding: 0; border: 0; border-radius: 14px; overflow: hidden; cursor: pointer; background: var(--line); }
+.ov-pic.big { grid-column: span 2; grid-row: span 2; }
+.ov-pic img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ov-pic span { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px 8px 6px; font-size: 12px; font-weight: 600; color: #fff; text-align: left;
+  background: linear-gradient(transparent, rgba(0, 0, 0, .6)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ov-bars { display: grid; gap: 8px; }
+.ov-bar { display: grid; grid-template-columns: minmax(0, 11.5em) 1fr 1.6em; align-items: center; gap: 10px; color: inherit; text-decoration: none; font-size: 14px; }
+.ov-lbl { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ov-track { height: 10px; border-radius: 99px; background: var(--line); overflow: hidden; }
+.ov-track i { display: block; height: 100%; border-radius: 99px; background: var(--c); }
+.ov-bar b { text-align: right; }
+.ov-mem { display: flex; gap: 12px; align-items: center; }
+.ov-memimg { width: 72px; height: 72px; object-fit: cover; border-radius: 12px; background: var(--line); }
+.dupe-note { background: var(--accent-soft); border-radius: 12px; padding: 8px 10px; margin: 6px 0; font-size: 14px; display: grid; gap: 6px; }
+.dupe-note.conflict { background: #fff4d6; color: #6b4a00; }
+@media (prefers-color-scheme: dark) { .dupe-note.conflict { background: #3a2e12; color: #f5d98a; } }
+.dupe-note .seg { justify-self: start; }
+.dupe-note .seg button { padding: 6px 10px; font-size: 13px; }
 .spins { display: grid; gap: 10px; }
 .spin { display: flex; gap: 12px; text-align: left; font: inherit; color: var(--ink); cursor: pointer; border-left: 5px solid var(--c); margin: 0; animation: pop .35s ease-out backwards; }
 .spin:nth-child(2) { animation-delay: .07s; } .spin:nth-child(3) { animation-delay: .14s; }
