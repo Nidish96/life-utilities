@@ -232,6 +232,14 @@ img.broken { opacity: .3; }
 .files.edit:empty { display: none; }
 .docimg { width: 100%; border-radius: 12px; background: var(--line); cursor: zoom-in; }
 .pdf { font: inherit; text-align: center; cursor: pointer; font-size: 18px; }
+.r-pending { background: #fff1c7; color: #7a5600; } .r-submitted { background: #dfeaf8; color: #22497a; } .r-paid { background: #d8f0e2; color: #1d5e3f; } .r-rejected { background: #f3dcda; color: #8a2c22; }
+.rcard .row:first-child { margin: 0; align-items: flex-start; }
+.ractions { justify-content: flex-end; flex-wrap: wrap; margin-bottom: 0; }
+.ractions .btn { padding: 7px 12px; font-size: 14px; }
+.rtiles { margin-top: 0; margin-bottom: 12px; }
+.rtiles .tile { font: inherit; color: inherit; cursor: pointer; padding: 12px 6px; }
+.rtiles .tile b { font-size: 18px; overflow-wrap: anywhere; }
+.rtiles .tile.sel { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 .pdfthumb { display: grid; place-items: center; aspect-ratio: 1; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); font-size: 14px; }
 
 @media print {

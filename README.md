@@ -5,6 +5,7 @@ A personal web app built for your phone, with three parts:
 - **💛 People**: capture what friends tell you. The app sorts each thing into a category (food, place, dream vacation, long-held desire, gift idea…) and looks up details: a picture, the exact location on a map, places to try it. It also does bulk import of a big text dump, an interest graph for each person, a randomized planner for birthdays, gifts, food and outings, an "Avoid" list for dislikes and allergies, and memories with photos.
 - **🔑 Houses**: log each viewing with camera photos, GPS location, price, size, a checklist, pros and cons, and a rating. You get a map of everything you've seen and a summary report that compares the houses (written by Claude, printable as a PDF).
 - **🧾 Docs**: snap a bill, invoice, warranty card or prescription, and Claude reads it and fills in the form (amount, vendor, warranty end date, medicines and dosage). The list is searchable, and the app warns you when a warranty is about to run out.
+  - **💸 Reimbursements**: tick *"I need to claim this back"* on any bill (or tap 💸 Reimbursements → ＋) to track purchases you'll get paid back for: who pays (employer, insurance, a friend), the claim deadline, and the status (⏳ To claim → 📨 Submitted → ✅ Received / Rejected). You see totals still to claim and awaiting payment, get reminders before the deadline, and can download a CSV for your expense report.
 
 **Hosting:** the app is static files on GitHub Pages, with no build step and no server.
 **Storage:** your data lives in a folder called `LifeUtilities` in **your own Google Drive**. It holds `db.json` with all the records, plus a `media/` folder for photos and files.
@@ -61,6 +62,7 @@ Open the URL on your phone. On iPhone, tap Safari's **Share** button and choose 
 - **Home → Quick spin**: pick a person (or 🎲 for a random one) and an occasion, all in one tap.
 - **Houses**: tap ＋ during a viewing, use **📷 Camera** and **📍 I'm here now**, and fill in what you can. Tap a checklist chip once for ✓, twice for ✕, three times to clear it. **📄 Summary report** gives a side-by-side table, photos, and a written report from Claude based on your priorities. Use **🖨️ Print** to save it as a PDF.
 - **Docs**: tap ＋, **📷 Snap** or attach a PDF, check the form Claude filled in, and save.
+- **Reimbursements**: Docs → **💸 Reimbursements** (also shown under *Heads up* on Home). Each claim has one-tap buttons for the next step: **Mark submitted** (with an optional reference number), then **Got paid** (enter the amount if it was less than you claimed) or **Rejected**. Filter by status or by who pays, and use **⬇ CSV** to export what's on screen.
 
 ## Good to know
 
@@ -86,7 +88,7 @@ js/storage.js         Google Drive + on-device backends, merging
 js/ai.js              Claude/Gemini calls and prompts, Wikipedia + OpenStreetMap lookups
 js/enrich.js          background lookup queue
 js/connect.js         sign-in, moving data to Drive
-js/views/*.js         home, people, capture/import, houses, docs, settings
+js/views/*.js         home, people, capture/import, houses, docs, reimbursements, settings
 ```
 
 ## Run locally
