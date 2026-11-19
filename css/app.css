@@ -280,6 +280,30 @@ img.broken { opacity: .3; }
 .rtiles .tile.sel { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 .pdfthumb { display: grid; place-items: center; aspect-ratio: 1; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); font-size: 14px; }
 
+/* ---------- watchlist ---------- */
+.wpick h3 { margin-top: 0; }
+.wtabs { margin: 14px 0 8px; position: static; }
+.wcard { display: flex; gap: 12px; align-items: center; width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer; padding: 10px; }
+.wcard .grow { display: flex; flex-direction: column; gap: 2px; }
+.wposter, .wsug-p, .wa-p, .wdet-p { flex: none; object-fit: cover; border-radius: 8px; background: var(--line); display: grid; place-items: center; }
+.wposter { width: 52px; height: 76px; font-size: 24px; }
+.wpicks { display: grid; gap: 10px; margin-top: 10px; }
+.wsug { display: flex; gap: 12px; padding: 10px; border: 1px solid var(--line); border-radius: 14px; background: var(--bg); animation: pop .35s ease-out backwards; }
+.wsug:nth-child(2) { animation-delay: .07s; } .wsug:nth-child(3) { animation-delay: .14s; }
+.wsug-p { width: 76px; height: 112px; font-size: 32px; }
+.wsug b { font-size: 17px; }
+.wsug .row { margin-top: 6px; }
+.wa-res { display: grid; gap: 4px; margin: 6px 0 10px; max-height: 40vh; overflow: auto; }
+.wa-r { display: flex; gap: 10px; align-items: center; text-align: left; font: inherit; color: var(--ink); background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 6px; cursor: pointer; }
+.wa-r.on { border-color: var(--accent); background: var(--accent-soft); }
+.wa-r span:last-child { display: flex; flex-direction: column; } .wa-r small { color: var(--muted); }
+.wa-p { width: 36px; height: 52px; font-size: 18px; }
+.wdet { display: flex; gap: 14px; align-items: flex-start; }
+.wdet-p { width: 96px; height: 142px; font-size: 40px; }
+.wdet h2 { margin-top: 0; }
+.tiles:has(> :nth-child(4)) { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 420px) { .tiles:has(> :nth-child(4)) { grid-template-columns: repeat(2, 1fr); } }
+
 /* ---------- uploads ---------- */
 .upbox { background: var(--accent-soft); border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; display: grid; gap: 6px; }
 .upbox .row { margin: 0; }

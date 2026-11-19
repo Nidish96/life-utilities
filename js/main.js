@@ -10,6 +10,7 @@ import { housesList, houseDetail, houseEdit, houseReportPage } from './views/hou
 import { docsList, docDetail, docEdit } from './views/docs.js';
 import { reimbList } from './views/reimb.js';
 import { initLock } from './lock.js';
+import { watchPage } from './views/watch.js';
 import { welcome, settingsPage } from './views/settings.js';
 
 const routes = [
@@ -28,6 +29,7 @@ const routes = [
   [/^\/d\/new$/, (v, q) => docEdit(v, 'new', q), 'docs'],
   [/^\/d\/([^/]+)\/edit$/, docEdit, 'docs'],
   [/^\/d\/([^/]+)$/, docDetail, 'docs'],
+  [/^\/watch$/, watchPage, 'people'],
   [/^\/settings$/, settingsPage, ''],
 ];
 
