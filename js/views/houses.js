@@ -2,7 +2,8 @@ import { live, get, upsert, remove, cfg, setShared, on } from '../state.js';
 import { $, $$, esc, setTitle, openSheet, confirmDlg, toast, photoImg, hydrate, fmtDate, fmtMoney, stars, mapEmbed, mapsLink, md, today, go } from '../ui.js';
 import { deletePhotos } from '../media.js';
 import { addUploads, cancel, retry, handOff, attachedSince, pendingFor, withSigs } from '../uploads.js';
-import { aiReady, aiName, houseReport, geocode, reverseGeocode } from '../ai.js';
+import { aiReady, aiName, houseReport, reverseGeocode } from '../ai.js';
+import { loadLeaflet, pickLocation } from '../geo.js';
 
 const STATUS = {
   to_visit: { l: 'To visit', e: '🗓️' },
@@ -64,17 +65,11 @@ export function housesList(view) {
   hydrate(body);
 }
 
-async function loadLeaflet() {
-  if (window.L) return;
-  const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'; document.head.appendChild(css);
-  await new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
-}
 async function drawMap(el, houses) {
   const pts = houses.filter(h => h.lat && h.lng);
   el.innerHTML = `
     <div class="row wrap lm-bar"><button class="btn" id="lm-add">＋ Landmark</button>
       <span class="small muted grow">${landmarks().length ? 'Your places: ' + landmarks().map(l => `<button class="lm-chip" data-lm="${l.id}">${l.icon || '📍'} ${esc(l.name)}</button>`).join(' ') : 'Mark your office, school, family… to see how far each house is.'}</span></div>
-    <div id="lm-mode"></div>
     <div id="hmap" class="bigmap"></div>
     ${pts.length < houses.length ? `<p class="hint">${houses.length - pts.length} house(s) have no location yet.</p>` : ''}
     <p class="hint">Distances are straight-line (as the crow flies), not travel time.</p>`;
@@ -92,45 +87,22 @@ async function drawMap(el, houses) {
       const near = pts.map(h => ({ h, d: km(h, l) })).sort((a, b) => a.d - b.d).slice(0, 3);
       const m = L.marker([l.lat, l.lng], { icon: lmIcon(l), zIndexOffset: 1000 }).addTo(lmLayer).bindPopup(`<b>${l.icon || '📍'} ${esc(l.name)}</b>${l.note ? `<br><small>${esc(l.note)}</small>` : ''}
         ${near.length ? `<br><small>Closest: ${near.map(({ h, d }) => `<a href="#/h/${h.id}">${esc(h.title || 'House')}</a> ${fmtKm(d)}`).join(', ')}</small>` : ''}
-        <div class="lm-pop"><button data-lme="${l.id}">✏️ Edit</button><button data-lmm="${l.id}">✋ Move</button><button data-lmd="${l.id}">🗑</button></div>`);
+        <div class="lm-pop"><button data-lme="${l.id}">✏️ Edit</button><button data-lmm="${l.id}">✋ Drag</button><button data-lmp="${l.id}">🔗 Set by link</button><button data-lmd="${l.id}">🗑</button></div>`);
       lmMarkers.set(l.id, m);
     }
   };
   drawLandmarks();
   const all = [...houseMarkers, ...lmMarkers.values()];
   if (all.length) map.fitBounds(L.featureGroup(all).getBounds().pad(0.3), { maxZoom: 15 });
-  else {
-    map.setView([20.6, 78.9], 4);
-    if (cfg('homeCity')) geocode(cfg('homeCity')).then(g => g && map.setView([g.lat, g.lng], 12));
-  }
+  else map.setView([20.6, 78.9], 4);
   const refresh = () => housesList($('#view')); // redraw list chips + distances
 
-  // adding: tap the map, use your location, or search
-  let adding = false;
-  const stopAdding = () => { adding = false; $('#lm-mode').innerHTML = ''; $('#hmap').classList.remove('picking'); };
-  $('#lm-add').onclick = () => {
-    adding = true; $('#hmap').classList.add('picking');
-    $('#lm-mode').innerHTML = `<div class="card upbox"><b>Tap the map where your landmark is</b>
-      <div class="row wrap"><input id="lm-q" class="grow" placeholder="…or search an address / place"><button class="btn" id="lm-find">🔎</button></div>
-      <div class="row wrap"><button class="btn" id="lm-here">📍 I'm here now</button><button class="btn ghost" id="lm-cancel">Cancel</button></div></div>`;
-    $('#lm-cancel').onclick = stopAdding;
-    const find = async () => {
-      const q = $('#lm-q').value.trim(); if (!q) return toast('Type an address or place');
-      const g = await geocode([q, cfg('homeCity')].filter(Boolean).join(', ')) || await geocode(q);
-      if (!g) return toast('Could not find that place');
-      map.setView([g.lat, g.lng], 15); stopAdding();
-      editLandmark({ lat: g.lat, lng: g.lng, name: q.split(',')[0] }, refresh);
-    };
-    $('#lm-find').onclick = find;
-    $('#lm-q').onkeydown = e => { if (e.key === 'Enter') find(); };
-    $('#lm-here').onclick = () => {
-      if (!navigator.geolocation) return toast('Location not available on this device');
-      toast('Getting your location…');
-      navigator.geolocation.getCurrentPosition(pos => { stopAdding(); editLandmark({ lat: pos.coords.latitude, lng: pos.coords.longitude }, refresh); },
-        err => toast('Could not get location: ' + err.message, 4000), { enableHighAccuracy: true, timeout: 15000 });
-    };
+  // adding: search, paste a link/coordinates, use your location, or tap the map — in the picker
+  $('#lm-add').onclick = async () => {
+    const c = map.getCenter();
+    const p = await pickLocation({ title: 'Where is your landmark?', center: all.length ? { lat: c.lat, lng: c.lng } : null });
+    if (p) editLandmark({ lat: p.lat, lng: p.lng, name: (p.label || '').split(',')[0].slice(0, 40) }, refresh);
   };
-  map.on('click', e => { if (!adding) return; stopAdding(); editLandmark({ lat: e.latlng.lat, lng: e.latlng.lng }, refresh); });
 
   // landmark popups: edit / move / delete
   map.on('popupopen', e => {
@@ -140,6 +112,11 @@ async function drawMap(el, houses) {
     box.querySelector('[data-lmd]')?.addEventListener('click', async () => {
       const l = get('landmarks', id('data-lmd'));
       if (await confirmDlg(`Remove the landmark "${l.name}"?`, 'Remove')) { remove('landmarks', l.id); refresh(); }
+    });
+    box.querySelector('[data-lmp]')?.addEventListener('click', async () => {
+      const l = get('landmarks', id('data-lmp')); map.closePopup();
+      const p = await pickLocation({ title: `Move ${l.name}`, start: l });
+      if (p) { upsert('landmarks', { ...l, lat: p.lat, lng: p.lng }); toast('Moved'); refresh(); }
     });
     box.querySelector('[data-lmm]')?.addEventListener('click', () => {
       const l = get('landmarks', id('data-lmm')), m = lmMarkers.get(l.id);
@@ -261,7 +238,8 @@ export function houseEdit(view, id) {
       <b>📍 Location</b>
       ${f('locality', 'Area / locality', 'text', 'placeholder="Indiranagar"')}
       <label>Address<textarea data-k="address" rows="2">${esc(h.address || '')}</textarea></label>
-      <div class="row wrap"><button class="btn" id="loc-here">📍 I'm here now</button><button class="btn" id="loc-find">🔎 Find address on map</button></div>
+      <div class="row wrap"><button class="btn" id="loc-here">📍 I'm here now</button><button class="btn" id="loc-find">🗺️ Search / paste a link</button></div>
+      <p class="hint">Paste a Google Maps link or coordinates, search a place, or drop a pin on the map.</p>
       <div id="loc-map">${mapEmbed(h.lat, h.lng)}</div>
     </div>
     <div class="card"><b>Checklist</b> <small class="muted">tap: ✓ yes → ✕ no → unknown</small>
@@ -345,10 +323,12 @@ export function houseEdit(view, id) {
     }, err => toast('Could not get location: ' + err.message, 4000), { enableHighAccuracy: true, timeout: 15000 });
   };
   $('#loc-find').onclick = async () => {
-    const q = [$('[data-k="address"]').value, $('[data-k="locality"]').value, cfg('homeCity')].filter(Boolean).join(', ');
-    if (!q) return toast('Type an address or locality first');
-    const g = await geocode(q);
-    if (g) { setLoc(g.lat, g.lng); toast('Found it'); } else toast('Could not find that address');
+    const addr = $('[data-k="address"]'), loc = $('[data-k="locality"]');
+    const p = await pickLocation({ title: 'Where is this house?', start: h.lat ? { lat: h.lat, lng: h.lng } : null, query: h.lat ? '' : [addr.value.split('\n')[0], loc.value].filter(Boolean).join(', ') });
+    if (!p) return;
+    setLoc(p.lat, p.lng);
+    if (!addr.value && p.label) addr.value = p.label;
+    toast('Location set');
   };
   $('#h-save').onclick = () => {
     $$('[data-k]', view).forEach(i => { const k = i.dataset.k; let v = i.value.trim(); if (i.type === 'number') v = v === '' ? null : +v; h[k] = v; });
