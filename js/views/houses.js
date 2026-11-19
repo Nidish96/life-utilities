@@ -13,6 +13,22 @@ const STATUS = {
 };
 const CHECKS = ['Parking', 'Power backup', '24h water', 'Lift', 'Gated / security', 'Good sunlight', 'Ventilation', 'Quiet street', 'Pets allowed', 'Near transit', 'Balcony', 'Modular kitchen', 'Wardrobes', 'Gym / pool'];
 
+/* ---------- your landmarks (office, school, family…) ---------- */
+export const LM_ICONS = ['🏢', '🏫', '👪', '🚇', '🏋️', '🏥', '🛒', '🌳', '✈️', '⭐'];
+const LM_HINT = { '🏢': 'Office', '🏫': 'School', '👪': 'Family', '🚇': 'Metro station', '🏋️': 'Gym', '🏥': 'Hospital', '🛒': 'Groceries', '🌳': 'Park', '✈️': 'Airport', '⭐': 'Favourite spot' };
+const landmarks = () => live('landmarks').sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+// straight-line ("as the crow flies") distance in km
+export function km(a, b) {
+  const R = 6371, rad = x => x * Math.PI / 180;
+  const dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+const fmtKm = d => (d < 1 ? `${Math.round(d * 1000 / 10) * 10} m` : `${d < 10 ? d.toFixed(1) : Math.round(d)} km`);
+// [{ l, d }] for a house with a location, nearest first
+const distances = h => (h.lat && h.lng ? landmarks().filter(l => l.lat && l.lng).map(l => ({ l, d: km(h, l) })) : []);
+const distLine = (h, n = 3) => distances(h).slice(0, n).map(({ l, d }) => `${l.icon || '📍'} ${esc(l.name)} ${fmtKm(d)}`).join(' · ');
+
 const priceLine = h => [fmtMoney(h.price) && `${fmtMoney(h.price)}${h.deal === 'rent' ? '/mo' : ''}`, h.bhk, h.area && `${h.area} sq ft`].filter(Boolean).join(' · ');
 
 /* ---------------- list ---------------- */
@@ -34,15 +50,16 @@ export function housesList(view) {
   $$('[data-f]', view).forEach(b => b.onclick = () => { filter = b.dataset.f; housesList(view); });
   $$('[data-m]', view).forEach(b => b.onclick = () => { mode = b.dataset.m; housesList(view); });
   const body = $('#hbody');
-  if (!shown.length) { body.innerHTML = `<div class="empty">No houses here yet. Tap ＋ when you're at a viewing — snap photos, drop the location, jot what you noticed.</div>`; return; }
   if (mode === 'map') return drawMap(body, shown);
+  if (!shown.length) { body.innerHTML = `<div class="empty">No houses here yet. Tap ＋ when you're at a viewing — snap photos, drop the location, jot what you noticed.</div>`; return; }
   body.innerHTML = shown.map(h => `
     <a class="card hcard" href="#/h/${h.id}">
       ${h.photos?.length ? photoImg(h.photos[0], 'hcover') : '<div class="hcover none">🏠</div>'}
       <div class="hinfo"><div class="row"><b class="grow">${esc(h.title || h.address || 'Untitled')}</b><span class="status s-${h.status}">${STATUS[h.status]?.e || ''} ${STATUS[h.status]?.l || ''}</span></div>
       <div class="small">${esc(priceLine(h))}</div>
       <div class="small muted">${esc(h.locality || h.address || '')}</div>
-      <div class="small"><span class="stars">${stars(h.rating)}</span> ${h.visitedOn ? '· ' + fmtDate(h.visitedOn) : ''} ${h.photos?.length ? `· 📷 ${h.photos.length}` : ''}</div></div>
+      <div class="small"><span class="stars">${stars(h.rating)}</span> ${h.visitedOn ? '· ' + fmtDate(h.visitedOn) : ''} ${h.photos?.length ? `· 📷 ${h.photos.length}` : ''}</div>
+      ${distLine(h) ? `<div class="small muted">${distLine(h)}</div>` : ''}</div>
     </a>`).join('');
   hydrate(body);
 }
@@ -54,13 +71,105 @@ async function loadLeaflet() {
 }
 async function drawMap(el, houses) {
   const pts = houses.filter(h => h.lat && h.lng);
-  el.innerHTML = `<div id="hmap" class="bigmap"></div>${pts.length < houses.length ? `<p class="hint">${houses.length - pts.length} house(s) have no location yet.</p>` : ''}`;
-  if (!pts.length) { $('#hmap').outerHTML = '<div class="empty">No locations saved yet.</div>'; return; }
+  el.innerHTML = `
+    <div class="row wrap lm-bar"><button class="btn" id="lm-add">＋ Landmark</button>
+      <span class="small muted grow">${landmarks().length ? 'Your places: ' + landmarks().map(l => `<button class="lm-chip" data-lm="${l.id}">${l.icon || '📍'} ${esc(l.name)}</button>`).join(' ') : 'Mark your office, school, family… to see how far each house is.'}</span></div>
+    <div id="lm-mode"></div>
+    <div id="hmap" class="bigmap"></div>
+    ${pts.length < houses.length ? `<p class="hint">${houses.length - pts.length} house(s) have no location yet.</p>` : ''}
+    <p class="hint">Distances are straight-line (as the crow flies), not travel time.</p>`;
   try { await loadLeaflet(); } catch { el.innerHTML = '<div class="empty">Map could not load (offline?).</div>'; return; }
   const map = L.map('hmap');
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
-  const markers = pts.map(h => L.marker([h.lat, h.lng]).addTo(map).bindPopup(`<b>${esc(h.title || 'House')}</b><br>${esc(priceLine(h))}<br><a href="#/h/${h.id}">Open →</a>`));
-  map.fitBounds(L.featureGroup(markers).getBounds().pad(0.3), { maxZoom: 15 });
+  const houseIcon = h => L.divIcon({ className: '', html: `<div class="hpin s-${h.status}">🏠</div>`, iconSize: [34, 34], iconAnchor: [17, 17], popupAnchor: [0, -16] });
+  const lmIcon = l => L.divIcon({ className: '', html: `<div class="lmpin">${l.icon || '📍'}<span>${esc(l.name)}</span></div>`, iconSize: [36, 36], iconAnchor: [18, 18], popupAnchor: [0, -16] });
+  const houseMarkers = pts.map(h => L.marker([h.lat, h.lng], { icon: houseIcon(h) }).addTo(map).bindPopup(`<b>${esc(h.title || 'House')}</b><br>${esc(priceLine(h))}${distLine(h, 5) ? `<br><small>${distLine(h, 5)}</small>` : ''}<br><a href="#/h/${h.id}">Open →</a>`));
+  const lmLayer = L.layerGroup().addTo(map);
+  const lmMarkers = new Map();
+  const drawLandmarks = () => {
+    lmLayer.clearLayers(); lmMarkers.clear();
+    for (const l of landmarks().filter(x => x.lat && x.lng)) {
+      const near = pts.map(h => ({ h, d: km(h, l) })).sort((a, b) => a.d - b.d).slice(0, 3);
+      const m = L.marker([l.lat, l.lng], { icon: lmIcon(l), zIndexOffset: 1000 }).addTo(lmLayer).bindPopup(`<b>${l.icon || '📍'} ${esc(l.name)}</b>${l.note ? `<br><small>${esc(l.note)}</small>` : ''}
+        ${near.length ? `<br><small>Closest: ${near.map(({ h, d }) => `<a href="#/h/${h.id}">${esc(h.title || 'House')}</a> ${fmtKm(d)}`).join(', ')}</small>` : ''}
+        <div class="lm-pop"><button data-lme="${l.id}">✏️ Edit</button><button data-lmm="${l.id}">✋ Move</button><button data-lmd="${l.id}">🗑</button></div>`);
+      lmMarkers.set(l.id, m);
+    }
+  };
+  drawLandmarks();
+  const all = [...houseMarkers, ...lmMarkers.values()];
+  if (all.length) map.fitBounds(L.featureGroup(all).getBounds().pad(0.3), { maxZoom: 15 });
+  else {
+    map.setView([20.6, 78.9], 4);
+    if (cfg('homeCity')) geocode(cfg('homeCity')).then(g => g && map.setView([g.lat, g.lng], 12));
+  }
+  const refresh = () => housesList($('#view')); // redraw list chips + distances
+
+  // adding: tap the map, use your location, or search
+  let adding = false;
+  const stopAdding = () => { adding = false; $('#lm-mode').innerHTML = ''; $('#hmap').classList.remove('picking'); };
+  $('#lm-add').onclick = () => {
+    adding = true; $('#hmap').classList.add('picking');
+    $('#lm-mode').innerHTML = `<div class="card upbox"><b>Tap the map where your landmark is</b>
+      <div class="row wrap"><input id="lm-q" class="grow" placeholder="…or search an address / place"><button class="btn" id="lm-find">🔎</button></div>
+      <div class="row wrap"><button class="btn" id="lm-here">📍 I'm here now</button><button class="btn ghost" id="lm-cancel">Cancel</button></div></div>`;
+    $('#lm-cancel').onclick = stopAdding;
+    const find = async () => {
+      const q = $('#lm-q').value.trim(); if (!q) return toast('Type an address or place');
+      const g = await geocode([q, cfg('homeCity')].filter(Boolean).join(', ')) || await geocode(q);
+      if (!g) return toast('Could not find that place');
+      map.setView([g.lat, g.lng], 15); stopAdding();
+      editLandmark({ lat: g.lat, lng: g.lng, name: q.split(',')[0] }, refresh);
+    };
+    $('#lm-find').onclick = find;
+    $('#lm-q').onkeydown = e => { if (e.key === 'Enter') find(); };
+    $('#lm-here').onclick = () => {
+      if (!navigator.geolocation) return toast('Location not available on this device');
+      toast('Getting your location…');
+      navigator.geolocation.getCurrentPosition(pos => { stopAdding(); editLandmark({ lat: pos.coords.latitude, lng: pos.coords.longitude }, refresh); },
+        err => toast('Could not get location: ' + err.message, 4000), { enableHighAccuracy: true, timeout: 15000 });
+    };
+  };
+  map.on('click', e => { if (!adding) return; stopAdding(); editLandmark({ lat: e.latlng.lat, lng: e.latlng.lng }, refresh); });
+
+  // landmark popups: edit / move / delete
+  map.on('popupopen', e => {
+    const box = e.popup.getElement();
+    const id = a => box.querySelector(`[${a}]`)?.getAttribute(a);
+    box.querySelector('[data-lme]')?.addEventListener('click', () => { map.closePopup(); editLandmark(get('landmarks', id('data-lme')), refresh); });
+    box.querySelector('[data-lmd]')?.addEventListener('click', async () => {
+      const l = get('landmarks', id('data-lmd'));
+      if (await confirmDlg(`Remove the landmark "${l.name}"?`, 'Remove')) { remove('landmarks', l.id); refresh(); }
+    });
+    box.querySelector('[data-lmm]')?.addEventListener('click', () => {
+      const l = get('landmarks', id('data-lmm')), m = lmMarkers.get(l.id);
+      map.closePopup(); m.dragging.enable(); toast('Drag the landmark to its new spot', 3500);
+      m.once('dragend', () => { const p = m.getLatLng(); m.dragging.disable(); upsert('landmarks', { ...l, lat: +p.lat.toFixed(6), lng: +p.lng.toFixed(6) }); toast('Moved'); refresh(); });
+    });
+  });
+  $$('[data-lm]', el).forEach(b => b.onclick = () => { const m = lmMarkers.get(b.dataset.lm); if (m) { map.setView(m.getLatLng(), Math.max(map.getZoom(), 14)); m.openPopup(); } });
+}
+
+function editLandmark(l, done) {
+  const isNew = !l.id;
+  l = { icon: '🏢', name: '', note: '', ...l };
+  const s = openSheet(`<h3>${isNew ? 'New landmark' : 'Edit landmark'}</h3>
+    <div class="lm-icons">${LM_ICONS.map(i => `<button class="${l.icon === i ? 'on' : ''}" data-i="${i}" title="${LM_HINT[i]}">${i}</button>`).join('')}</div>
+    <label>Name<input id="lm-name" value="${esc(l.name)}" placeholder="${LM_HINT[l.icon] || 'Office'}"></label>
+    <label>Note <small>(optional)</small><input id="lm-note" value="${esc(l.note || '')}" placeholder="e.g. 9:30 start, want under 30 min"></label>
+    <button class="btn primary block" id="lm-save">${isNew ? 'Add landmark' : 'Save'}</button>`);
+  $$('.lm-icons button', s.el).forEach(b => b.onclick = () => {
+    l.icon = b.dataset.i;
+    $$('.lm-icons button', s.el).forEach(x => x.classList.toggle('on', x === b));
+    $('#lm-name', s.el).placeholder = LM_HINT[l.icon];
+  });
+  $('#lm-save', s.el).onclick = () => {
+    l.name = $('#lm-name', s.el).value.trim() || LM_HINT[l.icon];
+    l.note = $('#lm-note', s.el).value.trim();
+    l.lat = +(+l.lat).toFixed(6); l.lng = +(+l.lng).toFixed(6);
+    upsert('landmarks', l); s.close(); toast(isNew ? `Added ${l.name}` : 'Saved'); done?.();
+  };
+  setTimeout(() => $('#lm-name', s.el)?.focus(), 50);
 }
 
 /* ---------------- detail ---------------- */
@@ -91,6 +200,10 @@ export function houseDetail(view, id) {
     ${h.notes ? `<div class="card"><b>📝 Notes</b><p class="pre">${esc(h.notes)}</p></div>` : ''}
     ${h.address || h.lat ? `<div class="card"><b>📍 ${esc(h.locality || 'Location')}</b><p class="small">${esc(h.address || '')}</p>${mapEmbed(h.lat, h.lng)}
       <a class="btn ghost" target="_blank" rel="noopener" href="${mapsLink({ lat: h.lat, lng: h.lng, q: h.address })}">Open in Google Maps</a></div>` : ''}
+    ${distances(h).length ? `<div class="card"><b>📏 From your landmarks</b> <small class="muted">straight-line</small>
+      <div class="lm-dist">${distances(h).sort((a, b) => a.d - b.d).map(({ l, d }) => `<div class="row"><span class="grow">${l.icon || '📍'} ${esc(l.name)}</span><b>${fmtKm(d)}</b>
+        <a class="btn ghost small" target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&origin=${h.lat},${h.lng}&destination=${l.lat},${l.lng}">Route</a></div>`).join('')}</div></div>`
+      : h.lat && !landmarks().length ? `<p class="hint">Tip: add your office, school or family as landmarks on the 🗺️ Map to see distances here.</p>` : ''}
     ${h.contactName || h.contactPhone ? `<div class="card row"><span class="grow">👤 ${esc(h.contactName || '')} ${h.contactRole ? `<small class="muted">(${esc(h.contactRole)})</small>` : ''}</span>
       ${h.contactPhone ? `<a class="btn" href="tel:${esc(h.contactPhone)}">📞</a><a class="btn" target="_blank" rel="noopener" href="https://wa.me/${esc(h.contactPhone.replace(/\D/g, ''))}">💬</a>` : ''}</div>` : ''}
     ${h.listingUrl ? `<p><a target="_blank" rel="noopener" href="${esc(h.listingUrl)}">🔗 Listing</a></p>` : ''}
@@ -298,14 +411,16 @@ export function houseReportPage(view) {
     </div>
     <div id="ai-report">${last ? `<div class="card report"><small class="muted">Generated ${fmtDate(last.date)}</small>${md(last.text)}</div>` : ''}</div>
     <div id="static-report"></div>`;
+  const lms = landmarks().filter(l => l.lat && l.lng).slice(0, 4);
   const drawStatic = () => {
     const hs = all.filter(h => sel.has(h.id));
     $('#static-report').innerHTML = hs.length ? `
       <h3 class="section">Side by side</h3>
-      <div class="tablewrap card"><table><tr><th>Home</th><th>Price</th><th>Config</th><th>Area</th><th>₹/sqft</th><th>Rating</th><th>Checklist</th><th>Status</th></tr>
+      <div class="tablewrap card"><table><tr><th>Home</th><th>Price</th><th>Config</th><th>Area</th><th>₹/sqft</th><th>Rating</th><th>Checklist</th>${lms.map(l => `<th>${l.icon || '📍'} ${esc(l.name)}</th>`).join('')}<th>Status</th></tr>
       ${hs.map(h => { const c = Object.values(h.checks || {}); return `<tr><td><a href="#/h/${h.id}">${esc(h.title)}</a><br><small>${esc(h.locality || '')}</small></td><td>${fmtMoney(h.price)}${h.deal === 'rent' ? '/mo' : ''}</td><td>${esc(h.bhk || '')}</td><td>${h.area || ''}</td>
         <td>${h.price && h.area && h.deal !== 'rent' ? fmtMoney(Math.round(h.price / h.area)) : h.price && h.area ? (h.price / h.area).toFixed(1) : ''}</td><td class="stars">${stars(h.rating)}</td>
-        <td>${c.length ? `${c.filter(Boolean).length}/${c.length} ✓` : ''}</td><td>${STATUS[h.status]?.l || ''}</td></tr>`; }).join('')}</table></div>
+        <td>${c.length ? `${c.filter(Boolean).length}/${c.length} ✓` : ''}</td>${lms.map(l => `<td>${h.lat && h.lng ? fmtKm(km(h, l)) : ''}</td>`).join('')}<td>${STATUS[h.status]?.l || ''}</td></tr>`; }).join('')}</table></div>
+      ${lms.length ? '<p class="hint">Landmark distances are straight-line.</p>' : ''}
       ${hs.map(h => `<div class="card rhouse"><div class="row"><b class="grow">${esc(h.title)}</b><span class="stars">${stars(h.rating)}</span></div>
         <div class="small">${esc(priceLine(h))} · ${esc(h.locality || h.address || '')}</div>
         ${h.photos?.length ? `<div class="photos">${h.photos.slice(0, 4).map(ph => photoImg(ph)).join('')}</div>` : ''}
@@ -320,7 +435,7 @@ export function houseReportPage(view) {
     const prio = $('#prio').value; setShared('housePriorities', prio);
     const out = $('#ai-report'); out.innerHTML = '<div class="card"><div class="spinner"></div><p class="center muted">Comparing houses…</p></div>';
     try {
-      const text = await houseReport(hs, prio);
+      const text = await houseReport(hs.map(h => ({ ...h, distancesToMyLandmarks: distances(h).map(({ l, d }) => `${l.name}: ${fmtKm(d)} straight-line`) })), prio);
       setShared('lastHouseReport', { date: today(), text });
       out.innerHTML = `<div class="card report"><small class="muted">Generated ${fmtDate(today())}</small>${md(text)}</div>`;
     } catch (e) { out.innerHTML = `<div class="card warn">${esc(e.message)}</div>`; }
