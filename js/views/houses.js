@@ -4,6 +4,7 @@ import { deletePhotos } from '../media.js';
 import { addUploads, cancel, retry, handOff, attachedSince, pendingFor, withSigs } from '../uploads.js';
 import { aiReady, aiName, houseReport, reverseGeocode } from '../ai.js';
 import { loadLeaflet, pickLocation } from '../geo.js';
+import { shareHouse } from '../houseshare.js';
 
 const STATUS = {
   to_visit: { l: 'To visit', e: '🗓️' },
@@ -159,7 +160,7 @@ export function houseDetail(view, id) {
     ${h.photos?.length ? `<div class="carousel" data-gallery>${h.photos.map(ph => photoImg(ph, 'cimg')).join('')}</div>
       <p class="small muted center">📷 ${h.photos.length} photo${h.photos.length === 1 ? '' : 's'} · swipe, or tap one to view full screen</p>` : ''}
     ${pendingFor('houses', id).length ? `<div class="card upbox"><b>⬆️ ${pendingFor('houses', id).length} photo${pendingFor('houses', id).length === 1 ? '' : 's'} still uploading…</b><div class="small muted">They'll appear here as each one finishes.</div></div>` : ''}
-    <div class="row"><h2 class="grow">${esc(h.title || 'Untitled')}</h2><a class="btn" href="#/h/${id}/edit">✏️ Edit</a></div>
+    <div class="row"><h2 class="grow">${esc(h.title || 'Untitled')}</h2><button class="btn" id="h-share">📤 Share</button><a class="btn" href="#/h/${id}/edit">✏️ Edit</a></div>
     <div class="chips">${Object.entries(STATUS).map(([k, v]) => `<button class="chip ${h.status === k ? 'on' : ''}" data-s="${k}">${v.e} ${v.l}</button>`).join('')}</div>
     <div class="grid2 card">
       ${kv('Price', fmtMoney(h.price) && fmtMoney(h.price) + (h.deal === 'rent' ? ' / month' : ''))}
@@ -186,6 +187,7 @@ export function houseDetail(view, id) {
     ${h.listingUrl ? `<p><a target="_blank" rel="noopener" href="${esc(h.listingUrl)}">🔗 Listing</a></p>` : ''}
     <button class="btn danger" id="h-del">Delete house</button>`;
   $$('[data-s]', view).forEach(b => b.onclick = () => { h.status = b.dataset.s; upsert('houses', h); houseDetail(view, id); });
+  $('#h-share').onclick = () => shareHouse(h, { priceLine: priceLine(h), status: `${STATUS[h.status]?.e || ''} ${STATUS[h.status]?.l || ''}`.trim(), distances: distances(h).sort((a, b) => a.d - b.d) });
   $('#h-del').onclick = async () => {
     if (!(await confirmDlg('Delete this house and its photos?'))) return;
     deletePhotos(h.photos); remove('houses', id); go('#/houses');
@@ -249,7 +251,13 @@ export function houseEdit(view, id) {
       <label>👎 Cons<textarea data-k="cons" rows="3" placeholder="Damp patch in bedroom, no cross-ventilation…">${esc(h.cons || '')}</textarea></label>
       <label>📝 Notes<textarea data-k="notes" rows="3">${esc(h.notes || '')}</textarea></label>
     </div>
-    <div class="card"><div class="grid2">${f('contactName', 'Contact name')}${f('contactRole', 'Owner / broker', 'text', 'list="roles"')}${f('contactPhone', 'Phone', 'tel')}${f('listingUrl', 'Listing link', 'url')}</div>
+    <div class="card"><div class="grid2">${f('contactName', 'Contact name', 'text', 'list="knownnames" autocomplete="off"')}${f('contactRole', 'Owner / broker', 'text', 'list="roles"')}
+      <div>${f('contactPhone', 'Phone', 'tel', 'list="knownphones" autocomplete="tel" inputmode="tel"')}
+        <div class="row wrap phone-btns"><button class="btn small" id="ph-paste" type="button">📋 Paste</button>${'contacts' in navigator && 'ContactsManager' in window ? '<button class="btn small" id="ph-pick" type="button">📇 Contacts</button>' : ''}</div></div>
+      ${f('listingUrl', 'Listing link', 'url')}</div>
+      <datalist id="knownphones">${knownContacts(h).map(c => `<option value="${esc(c.phone)}">${esc([c.name, c.role].filter(Boolean).join(' · '))}</option>`).join('')}</datalist>
+      <datalist id="knownnames">${knownContacts(h).filter(c => c.name).map(c => `<option value="${esc(c.name)}">${esc([c.role, c.phone].filter(Boolean).join(' · '))}</option>`).join('')}</datalist>
+      <p class="hint">Copied a number from your call log? Tap 📋 Paste. Contacts from your other houses are suggested as you type.</p>
       <datalist id="roles"><option>Owner</option><option>Broker</option><option>Builder</option><option>Society manager</option></datalist></div>
     <button class="btn primary block big" id="h-save">Save house</button>`;
 
@@ -312,6 +320,27 @@ export function houseEdit(view, id) {
     b.outerHTML = chk(k, h.checks[k]); bindChecks();
   });
   bindChecks();
+  // phone helpers
+  const contacts = knownContacts(h);
+  const phoneEl = $('[data-k="contactPhone"]'), nameEl = $('[data-k="contactName"]'), roleEl = $('[data-k="contactRole"]');
+  const fillFrom = c => { if (!c) return; if (!phoneEl.value) phoneEl.value = c.phone; if (!nameEl.value && c.name) nameEl.value = c.name; if (!roleEl.value && c.role) roleEl.value = c.role; };
+  phoneEl.addEventListener('change', () => fillFrom(contacts.find(c => digits(c.phone) === digits(phoneEl.value))));
+  nameEl.addEventListener('change', () => fillFrom(contacts.find(c => c.name && c.name.toLowerCase() === nameEl.value.trim().toLowerCase())));
+  $('#ph-paste').onclick = async () => {
+    let t = '';
+    try { t = await navigator.clipboard.readText(); } catch { return toast('Your browser blocked pasting here — long-press the phone box and choose Paste', 4500); }
+    const n = extractPhone(t);
+    if (!n) return toast('No phone number found in what you copied');
+    phoneEl.value = n; fillFrom(contacts.find(c => digits(c.phone) === digits(n))); toast('Pasted ' + n);
+  };
+  $('#ph-pick')?.addEventListener('click', async () => {
+    try {
+      const [c] = await navigator.contacts.select(['name', 'tel'], { multiple: false });
+      if (!c) return;
+      if (c.tel?.[0]) phoneEl.value = c.tel[0];
+      if (c.name?.[0] && !nameEl.value) nameEl.value = c.name[0];
+    } catch (e) { toast('Could not open contacts: ' + e.message, 4000); }
+  });
   const setLoc = (lat, lng) => { h.lat = +(+lat).toFixed(6); h.lng = +(+lng).toFixed(6); $('#loc-map').innerHTML = mapEmbed(h.lat, h.lng); };
   $('#loc-here').onclick = () => {
     if (!navigator.geolocation) return toast('Location not available on this device');
@@ -371,6 +400,23 @@ function choosePhotos(picked, known, start) {
   $('#cp-none', s.el).onclick = () => { items.forEach(i => i.on = false); upd(); };
   $('#cp-go', s.el).onclick = () => { const pick = items.filter(i => i.on).map(({ file, sig }) => ({ file, sig })); s.close(); start(pick); };
   upd();
+}
+
+// Phone numbers: pull one out of copied text ("Ramesh Broker +91 98450 12345 · 2 min ago" → "+91 98450 12345")
+const digits = s => (s || '').replace(/\D/g, '').replace(/^(91|0)(?=\d{10}$)/, '');
+export function extractPhone(t) {
+  const m = (t || '').match(/(\+?\d[\d\s().-]{6,}\d)/);
+  return m && digits(m[1]).length >= 7 ? m[1].replace(/\s+/g, ' ').trim() : null;
+}
+// Owners/brokers already saved on other houses (brokers often show several places)
+function knownContacts(current) {
+  const by = new Map();
+  for (const x of live('houses').sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))) {
+    if (x.id === current.id || !x.contactPhone) continue;
+    const k = digits(x.contactPhone);
+    if (!by.has(k)) by.set(k, { phone: x.contactPhone, name: x.contactName || '', role: x.contactRole || '' });
+  }
+  return [...by.values()].slice(0, 30);
 }
 
 const chk = (c, v) => `<button class="chip ${v === true ? 'yes' : v === false ? 'no' : ''}" data-c="${esc(c)}">${v === true ? '✓ ' : v === false ? '✕ ' : ''}${esc(c)}</button>`;

@@ -27,7 +27,7 @@ export function home(view) {
     <div class="card">
       <div class="row"><select id="spin-p" class="grow">${people.sort((a, b) => a.name.localeCompare(b.name)).map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select>
       <button class="btn" id="spin-rand" title="Random person">🎲</button></div>
-      <div class="chips">${Object.entries(INTENTS).map(([k, v]) => `<button class="chip" data-i="${k}">${v.e} ${v.l}</button>`).join('')}</div>
+      <div class="chips">${Object.entries(INTENTS).map(([k, v]) => `<button class="chip" data-i="${k}">${v.e} ${v.l}</button>`).join('')}<button class="chip" id="spin-watch">🍿 Watch</button></div>
     </div>` : ''}
     ${warr.length || follow.length || claimCard ? `<h3 class="section">Heads up</h3>
       ${claimDue.map(d => { const n = deadlineIn(d); return `<a class="card row" href="#/d/${d.id}">⏰ <span class="grow">Claim ${esc(d.title)}</span><small>${n < 0 ? 'deadline passed' : n === 0 ? 'due today' : 'by ' + fmtDate(d.reimbDeadline)}</small></a>`; }).join('')}
@@ -39,9 +39,11 @@ export function home(view) {
       <a class="card tile" href="#/people"><b>${people.length}</b><small>people</small></a>
       <a class="card tile" href="#/houses"><b>${houses.length}</b><small>houses in play</small></a>
       <a class="card tile" href="#/docs"><b>${live('documents').length}</b><small>bills & docs</small></a>
+      <a class="card tile" href="#/watch"><b>${live('watch').filter(w => w.status !== 'watched').length}</b><small>🍿 to watch</small></a>
     </div>`;
   renderCapture($('#home-cap'), { onSaved: () => {} });
   $('#spin-rand')?.addEventListener('click', () => { const s = $('#spin-p'); s.selectedIndex = Math.floor(Math.random() * s.options.length); });
+  $('#spin-watch')?.addEventListener('click', () => go(`#/watch?with=${$('#spin-p').value}`));
   $$('[data-i]', view).forEach(b => b.onclick = () => go(`#/p/${$('#spin-p').value}/plan?i=${b.dataset.i}`));
   $$('[data-mem]', view).forEach(b => b.onclick = () => editMemory(get('memories', b.dataset.mem)));
   hydrate(view);

@@ -60,9 +60,17 @@ Open the URL on your phone. On iPhone, tap Safari's **Share** button and choose 
 - **Bulk import**: tap ＋ → **Paste a big dump**, or load a `.txt` file. The app splits it into batches, sorts every line, groups the results by person, and marks likely duplicates. You review everything before it's saved. A copy of the raw text is kept in `media/`.
 - **Overview tab** (the first tab on a person): a short portrait built from what you've saved: what they're mostly into, favourites, dreams, open gift ideas, things to avoid, birthday and your last memory together. Below that are a photo mood board, interest bars (tap one to jump to that category in Likes) and recently added items. Tap any underlined item for details.
 - **Duplicates**: when you save something that matches what you already have for that person, the review screen tells you ("Already saved" or "Looks similar to …"). Exact repeats start out skipped, and you can choose **Skip**, **Add to existing** (adds the new details to the old item) or **Save as new**. It also warns when something clashes with a dislike, e.g. "loves coriander chutney" when you'd saved "hates coriander". Matching runs on the phone (it ignores plurals, filler words and small typos), so it works without an AI key. Bulk import uses the same matching.
+- **🍿 Watchlist** (People → Watchlist, the Home tile, or *Quick spin → 🍿 Watch*): movies and shows that you and the people you know want to watch. Tap ＋ and type a title: posters, year, genres and runtime come from TVmaze (shows) and the iTunes catalogue (movies), free and with no key needed. Mark who wants to watch it and where it's streaming. Anything people mention in your notes ("Meera wants to watch Past Lives") is added automatically.
+  - **What should we watch?** Pick who's watching (and optionally movie/show or a mood) and tap **🎲 Suggest something**. It favours titles everyone there wants, notes who has already seen something, and avoids genres someone has said they dislike (e.g. horror). **✓ We watched it** records who watched it and a rating. A title stays on the list for anyone who hasn't seen it yet.
+  - With an AI key, **✨ Fresh ideas** suggests new titles that suit the group.
 - **Plan tab**: pick 🎂 Birthday, 🎁 Gift, 🍽️ Food, 🗺️ Go out or 🎲 Surprise, then tap **Shuffle**. You get three random picks from what you've saved. Things marked "✓ done/gifted" are skipped. **Fresh ideas from Claude** suggests new ideas based on the whole profile, optionally with live web search near your home city (set it in Settings).
 - **Home → Quick spin**: pick a person (or 🎲 for a random one) and an occasion, all in one tap.
 - **Houses**: tap ＋ during a viewing, use **📷 Camera** and **📍 I'm here now**, and fill in what you can. With **🖼️ Gallery** you first choose which photos to upload; ones you've already added are recognised and left out. Each photo appears straight away with its own progress, and a bar shows the overall progress. You can tap **Save house** while photos are still uploading: they keep going in the background (⬆️ in the top bar) and show up on the house as they finish. Tap any photo to open a full-screen viewer: swipe or use ← → to move between photos, and double-tap to zoom. Tap a checklist chip once for ✓, twice for ✕, three times to clear it. **📄 Summary report** gives a side-by-side table, photos, and a written report from Claude based on your priorities. Use **🖨️ Print** to save it as a PDF.
+- **Sharing a house**: on a house, tap **📤 Share**. You get a one-page summary with photos, price and key details, a small map with the house and your landmarks, distances, the checklist and pros/cons. Share it as an **image** (easiest to read in WhatsApp) or a **PDF** (with clickable Google Maps and listing links). Both come with a short text caption that includes the map link, and **💬 Copy text** gives just the text. Your private notes and the owner/broker contact are left out unless you tick them.
+- **Owner / broker phone**: websites can't read your phone's call log, so instead:
+  - copy the number from your call log and tap **📋 Paste**, which picks the number out of whatever you copied;
+  - numbers from your other houses are suggested as you type, and choosing one fills in the name and role;
+  - on Android Chrome, **📇 Contacts** opens your contact picker.
 - **Setting a location** (houses and landmarks): **🗺️ Search / paste a link** opens a map with a pin. You can:
   - paste a **Google Maps link**, or the text you get from Google Maps → *Share*;
   - paste **coordinates** (`12.9784, 77.6408` or `12°58'42"N 77°38'27"E`) or a **plus code** (`WJ8R+9C Bengaluru`);
@@ -102,6 +110,8 @@ js/ai.js              Claude/Gemini calls and prompts, Wikipedia + OpenStreetMap
 js/enrich.js          background lookup queue
 js/connect.js         sign-in, moving data to Drive
 js/uploads.js         background photo upload queue
+js/houseshare.js      one-page house summary (image / PDF) for sharing
+js/geo.js             map links & coordinates, place search, pick-on-map
 js/lock.js            app lock screen (passcode, Face ID / fingerprint, auto-lock)
 js/views/*.js         home, people, capture/import, houses, docs, reimbursements, settings
 ```

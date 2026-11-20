@@ -5,6 +5,7 @@ import { aiReady, aiName, modelFor, extractFacts, heuristicExtract } from '../ai
 import { enqueue } from '../enrich.js';
 import { uploadRaw } from '../media.js';
 import { findMatch } from '../match.js';
+import { syncFromFacts } from './watch.js';
 
 const norm = s => (s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
@@ -91,6 +92,7 @@ export function saveItems(items, updates = [], source = 'capture') {
     if (u.aliases?.length) p.aliases = [...new Set([...(p.aliases || []), ...u.aliases])];
     upsert('people', p);
   }
+  syncFromFacts(); // movies & shows people mentioned go on the watchlist
   return { n, people: [...people] };
 }
 

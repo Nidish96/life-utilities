@@ -7,6 +7,7 @@ import { uploadPhotos, deletePhotos } from '../media.js';
 import { enqueue } from '../enrich.js';
 import { aiReady, aiName, planIdeas } from '../ai.js';
 import { renderCapture } from './capture.js';
+import { wantsOf } from './watch.js';
 
 /* ---------------- list ---------------- */
 export function peopleList(view) {
@@ -15,6 +16,7 @@ export function peopleList(view) {
   const facts = live('facts');
   view.innerHTML = `
     <div class="row"><input id="ps" class="grow" type="search" placeholder="Search people or interests…"><button class="btn" id="addp">＋ Person</button></div>
+    <a class="card row" href="#/watch">🍿 <span class="grow"><b>Watchlist</b><br><small class="muted">${live('watch').filter(w => w.status !== 'watched').length} to watch · what should we watch?</small></span><span class="muted">›</span></a>
     <div id="plist"></div>`;
   const draw = (q = '') => {
     q = q.toLowerCase();
@@ -246,6 +248,7 @@ function overviewTab(el, p) {
     byCat.length && ['✨', `Mostly into ${listJoin(byCat.slice(0, 3).map(([c]) => `${cat(c).e} ${esc(cat(c).l.toLowerCase())}`))}`],
     favs.length && ['💛', `Loves ${listJoin(favs.map(factLink))}`],
     dreams.length && ['🌠', `Dreams of ${listJoin(dreams.map(factLink))}`],
+    wantsOf(p.id).length && ['🍿', `Wants to watch ${listJoin(wantsOf(p.id).slice(0, 3).map(w => esc(w.title)))}${wantsOf(p.id).length > 3 ? '…' : ''} · <a href="#/watch?with=${p.id}">pick something to watch together →</a>`],
     gifts.length && ['🎁', `${gifts.length} gift idea${gifts.length === 1 ? '' : 's'} waiting: ${listJoin(gifts.slice(0, 3).map(factLink))}${gifts.length > 3 ? '…' : ''}`],
     avoid.length && ['🚫', `<b>Avoid</b> ${listJoin(avoid.map(factLink))}`],
     p.birthday && ['🎂', `Birthday ${fmtDate(p.birthday)}${d !== null ? ` · ${d === 0 ? '<b>today!</b>' : d <= 30 ? `<b>in ${d} days</b>` : `in ${d} days`}` : ''}`],

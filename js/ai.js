@@ -132,6 +132,7 @@ const KW = [
   ['dislike', /\b(hates?|dislikes?|allergic|allergy|can'?t stand|cannot stand|doesn'?t (eat|like)|does not (eat|like)|avoids?|lactose|gluten)\b/i],
   ['memory', /\b(we went|we had|we did|together|our trip|we celebrated)\b/i],
   ['important_date', /\b(birthday|anniversary|b'?day)\b/i],
+  ['movie_tv', /\b(wants?|wanna|dying|keen|has|have|need|needs|should|must) (to )?(watch|binge)\b|\b(watch|watching|binge|binging|see) (the )?(new )?(movie|film|series|show|season)\b|\bwatchlist\b/i],
   ['dream_vacation', /\b(dream|bucket list|someday|one day)\b.*\b(visit|go to|travel|trip|see)\b|\b(vacation|holiday) (to|in)\b/i],
   ['long_held_desire', /\b(always wanted|has wanted|dreams? of|wish(es)? (to|she|he))\b/i],
   ['gift_idea', /\b(wants? (a|an|the|to buy)|wish ?list|would love (a|an|to have)|eyeing|needs? a new)\b/i],
@@ -198,7 +199,10 @@ export function heuristicExtract(text, people, defaultPerson) {
     }
     if (new RegExp(`^\\W*(?:${nameList.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})?,? (?:is )?my (${RELATIONS})\\W*$`, 'i').test(s)) continue; // only a relation
     const category = (KW.find(([, re]) => re.test(s)) || ['other'])[0];
-    items.push({ person: personName, person_id: person?.id || null, category, title: shortTitle(s, [...nameList, ...RELATIONS.split('|'), 'my'], true), detail: s.replace(/^(and|but)\s+/i, ''), tags: [], searchable: !['memory', 'important_date', 'dislike'].includes(category), date: null });
+    // "wants to watch The Bear on Hulu" → "The Bear" (keep the title as written)
+    const watchT = category === 'movie_tv' && (s.match(/\b(?:watch|watching|binge|see)\s+(?:the (?:movie|film|show|series)\s+)?(.+?)(?:\s+(?:on|with|this|next|together|soon|someday|sometime|again|tonight|later)\b.*)?[.!?]*$/i) || [])[1];
+    const title = watchT ? watchT.replace(/\s+(movie|film|series|show)$/i, '').replace(/^["“']|["”']$/g, '').trim() : shortTitle(s, [...nameList, ...RELATIONS.split('|'), 'my'], true);
+    items.push({ person: personName, person_id: person?.id || null, category, title, detail: s.replace(/^(and|but)\s+/i, ''), tags: [], searchable: !['memory', 'important_date', 'dislike'].includes(category), date: null });
   }
   return { items, updates: [...updates.values()] };
 }
