@@ -280,6 +280,13 @@ img.broken { opacity: .3; }
 .rtiles .tile.sel { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 .pdfthumb { display: grid; place-items: center; aspect-ratio: 1; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); font-size: 14px; }
 
+/* ---------- share a house ---------- */
+.share-opts label.check { margin: 2px 12px 2px 0; }
+.share-prev { max-height: 52vh; overflow: auto; border-radius: 14px; border: 1px solid var(--line); background: var(--bg); margin: 8px 0; }
+.share-prev img { width: 100%; display: block; }
+.share-btns .btn { min-width: 30%; }
+.phone-btns { margin: -2px 0 0; }
+
 /* ---------- watchlist ---------- */
 .wpick h3 { margin-top: 0; }
 .wtabs { margin: 14px 0 8px; position: static; }
