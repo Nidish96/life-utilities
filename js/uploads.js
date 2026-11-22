@@ -69,7 +69,8 @@ async function run(job) {
 function attachToRecord(job) {
   const r = get(job.target.coll, job.target.id);
   if (!r) { for (const id of [job.result.f, job.result.t]) state.backend.deleteFile(id).catch(() => {}); return; } // record was deleted meanwhile
-  r.photos = [...(r.photos || []), job.result];
+  if (job.target.attach) job.target.attach(r, job.result); // e.g. a photo for one item inside the record
+  else r.photos = [...(r.photos || []), job.result];
   upsert(job.target.coll, r);
   emit('photo-attached', job.target);
 }
@@ -98,3 +99,5 @@ export const attachedSince = (coll, id, since) => jobs
 
 // Uploads still running for a saved record.
 export const pendingFor = (coll, id) => pendingJobs().filter(j => j.target && j.target.coll === coll && j.target.id === id);
+// Uploads (running or failed) aimed at one part of a record, e.g. one inspection item.
+export const jobsFor = (coll, id, key) => jobs.filter(j => j.target && j.target.coll === coll && j.target.id === id && j.target.key === key && ['queued', 'working', 'error'].includes(j.status));
