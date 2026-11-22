@@ -5,6 +5,7 @@ import { addUploads, cancel, retry, handOff, attachedSince, pendingFor, withSigs
 import { aiReady, aiName, houseReport, reverseGeocode } from '../ai.js';
 import { loadLeaflet, pickLocation } from '../geo.js';
 import { shareHouse } from '../houseshare.js';
+import { inspectionCard } from './inspect.js';
 
 const STATUS = {
   to_visit: { l: 'To visit', e: '🗓️' },
@@ -162,6 +163,7 @@ export function houseDetail(view, id) {
     ${pendingFor('houses', id).length ? `<div class="card upbox"><b>⬆️ ${pendingFor('houses', id).length} photo${pendingFor('houses', id).length === 1 ? '' : 's'} still uploading…</b><div class="small muted">They'll appear here as each one finishes.</div></div>` : ''}
     <div class="row"><h2 class="grow">${esc(h.title || 'Untitled')}</h2><button class="btn" id="h-share">📤 Share</button><a class="btn" href="#/h/${id}/edit">✏️ Edit</a></div>
     <div class="chips">${Object.entries(STATUS).map(([k, v]) => `<button class="chip ${h.status === k ? 'on' : ''}" data-s="${k}">${v.e} ${v.l}</button>`).join('')}</div>
+    ${inspectionCard(h)}
     <div class="grid2 card">
       ${kv('Price', fmtMoney(h.price) && fmtMoney(h.price) + (h.deal === 'rent' ? ' / month' : ''))}
       ${kv(h.deal === 'rent' ? 'Deposit' : 'Booking amount', fmtMoney(h.deposit))}

@@ -280,6 +280,28 @@ img.broken { opacity: .3; }
 .rtiles .tile.sel { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 .pdfthumb { display: grid; place-items: center; aspect-ratio: 1; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); font-size: 14px; }
 
+/* ---------- move-in inspection ---------- */
+.insp-cta { border: 2px solid var(--accent); }
+.bar.big { height: 12px; margin: 10px 0 6px; }
+.insp-tally .chip { font-size: 13px; cursor: default; }
+.room-card { display: flex; gap: 12px; align-items: center; padding: 12px; }
+.room-card .grow { display: flex; flex-direction: column; gap: 3px; }
+.room-card .bar { height: 6px; margin: 4px 0 0; }
+.room-e { font-size: 28px; }
+.room-count { margin: 4px 0; } .room-count b { min-width: 1.6em; text-align: center; }
+.room-types { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin: 6px 0; }
+.item { padding: 10px 12px; margin-bottom: 8px; border-left: 5px solid var(--line); }
+.item.c-good { border-left-color: #3aa17e; } .item.c-fair { border-left-color: #e3a21a; } .item.c-damaged { border-left-color: #c0392b; } .item.c-missing { border-left-color: #555; } .item.c-na { border-left-color: var(--line); opacity: .75; }
+.it-head { margin: 0 0 6px; } .it-name { font-weight: 600; }
+.cond { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.cond button { font: inherit; font-size: 13px; font-weight: 600; padding: 8px 2px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--muted); cursor: pointer; }
+.cond button.on { background: var(--cb); color: var(--cc); border-color: var(--cc); }
+.it-extra { display: none; margin-top: 8px; }
+.item.open .it-extra { display: block; }
+.it-qty { width: 76px; flex: none; }
+.it-photos:empty { display: none; }
+.rep-prev img { border-bottom: 6px solid var(--line); }
+
 /* ---------- share a house ---------- */
 .share-opts label.check { margin: 2px 12px 2px 0; }
 .share-prev { max-height: 52vh; overflow: auto; border-radius: 14px; border: 1px solid var(--line); background: var(--bg); margin: 8px 0; }

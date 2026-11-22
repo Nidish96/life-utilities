@@ -11,6 +11,7 @@ import { docsList, docDetail, docEdit } from './views/docs.js';
 import { reimbList } from './views/reimb.js';
 import { initLock } from './lock.js';
 import { watchPage } from './views/watch.js';
+import { inspectPage, roomPage } from './views/inspect.js';
 import { welcome, settingsPage } from './views/settings.js';
 
 const routes = [
@@ -23,6 +24,8 @@ const routes = [
   [/^\/houses\/report$/, houseReportPage, 'houses'],
   [/^\/h\/new$/, v => houseEdit(v, 'new'), 'houses'],
   [/^\/h\/([^/]+)\/edit$/, houseEdit, 'houses'],
+  [/^\/h\/([^/]+)\/inspect$/, inspectPage, 'houses'],
+  [/^\/h\/([^/]+)\/inspect\/([^/]+)$/, roomPage, 'houses'],
   [/^\/h\/([^/]+)$/, houseDetail, 'houses'],
   [/^\/docs$/, docsList, 'docs'],
   [/^\/reimb$/, reimbList, 'docs'],
@@ -106,7 +109,7 @@ on('remote-change', () => {
   const a = document.activeElement;
   if (a && /INPUT|TEXTAREA|SELECT/.test(a.tagName)) return; // don't wipe a form you're typing in
   if (document.querySelector('.sheet-wrap')) return;
-  if (/^#\/(h|d)\/(new|[^/]+\/edit)/.test(location.hash)) return;
+  if (/^#\/(h|d)\/(new|[^/]+\/edit)/.test(location.hash) || /\/inspect\//.test(location.hash)) return;
   route();
 });
 window.addEventListener('hashchange', route);

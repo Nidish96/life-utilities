@@ -35,7 +35,7 @@ export async function settingsPage(view) {
   setTitle('Settings', true);
   const b = state.backend;
   const mode = cfg('mode');
-  const count = live('people').length + live('facts').length + live('houses').length + live('documents').length + live('memories').length + live('landmarks').length + live('watch').length;
+  const count = live('people').length + live('facts').length + live('houses').length + live('documents').length + live('memories').length + live('landmarks').length + live('watch').length + live('inspections').length;
   view.innerHTML = `
     <div class="card">
       <h3>☁️ Storage</h3>
