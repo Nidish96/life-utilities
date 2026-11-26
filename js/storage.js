@@ -2,9 +2,9 @@
 // Both expose: init(), hasToken(), loadDb(), saveDb(db) -> {db, changed}, putFile(blob, name) -> id,
 // fileBlob(id), fileUrl(id), deleteFile(id).
 
-export const COLLECTIONS = ['people', 'facts', 'memories', 'houses', 'documents', 'landmarks', 'watch', 'inspections'];
+export const COLLECTIONS = ['people', 'facts', 'memories', 'houses', 'documents', 'landmarks', 'watch', 'inspections', 'homes'];
 export const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-export const emptyDb = () => ({ version: 1, people: [], facts: [], memories: [], houses: [], documents: [], landmarks: [], watch: [], inspections: [], settings: {}, settingsUpdatedAt: 0 });
+export const emptyDb = () => ({ version: 1, people: [], facts: [], memories: [], houses: [], documents: [], landmarks: [], watch: [], inspections: [], homes: [], settings: {}, settingsUpdatedAt: 0 });
 
 export function normalize(db) {
   const e = emptyDb();
