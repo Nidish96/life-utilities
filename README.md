@@ -63,6 +63,15 @@ Open the URL on your phone. On iPhone, tap Safari's **Share** button and choose 
 - **🍿 Watchlist** (People → Watchlist, the Home tile, or *Quick spin → 🍿 Watch*): movies and shows that you and the people you know want to watch. Tap ＋ and type a title: posters, year, genres and runtime come from TVmaze (shows) and the iTunes catalogue (movies), free and with no key needed. Mark who wants to watch it and where it's streaming. Anything people mention in your notes ("Meera wants to watch Past Lives") is added automatically.
   - **What should we watch?** Pick who's watching (and optionally movie/show or a mood) and tap **🎲 Suggest something**. It favours titles everyone there wants, notes who has already seen something, and avoids genres someone has said they dislike (e.g. horror). **✓ We watched it** records who watched it and a rating. A title stays on the list for anyone who hasn't seen it yet.
   - With an AI key, **✨ Fresh ideas** suggests new titles that suit the group.
+- **✨ Plan something** (top of Home): describe what you want to do in your own words, e.g. *"take Varshu to the house, get her some food and a small present"*.
+  - **Without AI:** it recognises the people you mention (names or nicknames) and what you're after: food, a present, a movie, an outing, your home, a birthday. It builds options from what you've saved: their favourite foods (with the places you looked up, or "find it near your home"), gift ideas, places, the watchlist, directions to your home. It also reminds you of birthdays coming up and things to avoid.
+  - **With an AI key:** **🧠 Ask** sends that same saved info to Claude or Gemini for more creative plans. Optionally it can look up current places online.
+- **🏡 My home**: on your finalised house, tap **Make this my home**. You get:
+  - **Rent:** due date, **Mark paid** and a payment history.
+  - **Upkeep:** recurring jobs like AC service, purifier filter, chimney, pest control and deep clean, suggested from what your inspection found. **✓ Done** schedules the next one.
+  - **Repairs:** issues from your move-in inspection are added automatically. **💬 Message owner** opens WhatsApp with the message written for you, and you can mark each one reported, then fixed.
+  - **Useful contacts** and home notes.
+  - **Reminders:** due items appear under Home → *Heads up*, and **📅 Add reminders to calendar** downloads a calendar file with rent and upkeep repeating, so your phone reminds you.
 - **Plan tab**: pick 🎂 Birthday, 🎁 Gift, 🍽️ Food, 🗺️ Go out or 🎲 Surprise, then tap **Shuffle**. You get three random picks from what you've saved. Things marked "✓ done/gifted" are skipped. **Fresh ideas from Claude** suggests new ideas based on the whole profile, optionally with live web search near your home city (set it in Settings).
 - **Home → Quick spin**: pick a person (or 🎲 for a random one) and an occasion, all in one tap.
 - **Houses**: tap ＋ during a viewing, use **📷 Camera** and **📍 I'm here now**, and fill in what you can. With **🖼️ Gallery** you first choose which photos to upload; ones you've already added are recognised and left out. Each photo appears straight away with its own progress, and a bar shows the overall progress. You can tap **Save house** while photos are still uploading: they keep going in the background (⬆️ in the top bar) and show up on the house as they finish. Tap any photo to open a full-screen viewer: swipe or use ← → to move between photos, and double-tap to zoom. Tap a checklist chip once for ✓, twice for ✕, three times to clear it. **📄 Summary report** gives a side-by-side table, photos, and a written report from Claude based on your priorities. Use **🖨️ Print** to save it as a PDF.
@@ -120,6 +129,8 @@ js/uploads.js         background photo upload queue
 js/houseshare.js      one-page house summary (image / PDF) for sharing
 js/inspectreport.js   move-in condition report (A4 pages → PDF / images)
 js/geo.js             map links & coordinates, place search, pick-on-map
+js/views/ask.js       'Plan something' (offline plans + optional AI with your saved context)
+js/views/myhome.js    My home: rent, upkeep, repairs, contacts, calendar reminders
 js/lock.js            app lock screen (passcode, Face ID / fingerprint, auto-lock)
 js/views/*.js         home, people, capture/import, houses, docs, reimbursements, settings
 ```

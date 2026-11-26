@@ -12,6 +12,8 @@ import { reimbList } from './views/reimb.js';
 import { initLock } from './lock.js';
 import { watchPage } from './views/watch.js';
 import { inspectPage, roomPage } from './views/inspect.js';
+import { askPage } from './views/ask.js';
+import { myHomePage } from './views/myhome.js';
 import { welcome, settingsPage } from './views/settings.js';
 
 const routes = [
@@ -33,6 +35,8 @@ const routes = [
   [/^\/d\/([^/]+)\/edit$/, docEdit, 'docs'],
   [/^\/d\/([^/]+)$/, docDetail, 'docs'],
   [/^\/watch$/, watchPage, 'people'],
+  [/^\/ask$/, askPage, 'home'],
+  [/^\/myhome$/, myHomePage, 'houses'],
   [/^\/settings$/, settingsPage, ''],
 ];
 

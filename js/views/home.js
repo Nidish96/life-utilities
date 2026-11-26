@@ -1,6 +1,8 @@
 import { live, get } from '../state.js';
 import { $, $$, esc, setTitle, avatarHtml, daysUntil, daysFromToday, fmtDate, photoImg, hydrate, shuffle, go } from '../ui.js';
 import { renderCapture } from './capture.js';
+import { askCard, bindAskCard } from './ask.js';
+import { myHome, homeHouse, homeAlerts } from './myhome.js';
 import { claimsSummaryCard, openClaims, deadlineIn } from './reimb.js';
 import { INTENTS, setRerender, editMemory } from './people.js';
 
@@ -14,11 +16,14 @@ export function home(view) {
   const follow = live('documents').filter(d => { const n = daysFromToday(d.followUp); return n !== null && n >= 0 && n <= 14; });
   const claimDue = openClaims().filter(d => { const n = deadlineIn(d); return n !== null && n <= 14; });
   const claimCard = claimsSummaryCard();
+  const alerts = homeAlerts(), mh = homeHouse();
   const houses = live('houses').filter(h => !['rejected'].includes(h.status));
   const hr = new Date().getHours();
 
   view.innerHTML = `
     <h2 class="hello">${hr < 12 ? 'Good morning' : hr < 17 ? 'Good afternoon' : 'Good evening'} 👋</h2>
+    ${askCard()}
+    ${mh ? `<a class="card row" href="#/myhome">🏡 <span class="grow"><b>My home</b><br><small class="muted">${esc(mh.title)}</small></span><span class="muted">›</span></a>` : ''}
     <div id="home-cap"></div>
     ${bdays.length ? `<h3 class="section">Coming up</h3><div class="hscroll">${bdays.map(({ p, d }) => `
       <a class="card mini" href="#/p/${p.id}/plan?i=birthday">${avatarHtml(p, 40)}<b>${esc(p.name.split(' ')[0])}</b><small>🎂 ${d === 0 ? 'Today!' : `in ${d}d`}</small></a>`).join('')}</div>` : ''}
@@ -29,7 +34,8 @@ export function home(view) {
       <button class="btn" id="spin-rand" title="Random person">🎲</button></div>
       <div class="chips">${Object.entries(INTENTS).map(([k, v]) => `<button class="chip" data-i="${k}">${v.e} ${v.l}</button>`).join('')}<button class="chip" id="spin-watch">🍿 Watch</button></div>
     </div>` : ''}
-    ${warr.length || follow.length || claimCard ? `<h3 class="section">Heads up</h3>
+    ${warr.length || follow.length || claimCard || alerts.length ? `<h3 class="section">Heads up</h3>
+      ${alerts.map(a => `<a class="card row" href="#/myhome">${a.e} <span class="grow">${esc(a.t)}</span><small class="${a.warn ? 'warn' : ''}">${esc(a.s)}</small></a>`).join('')}
       ${claimDue.map(d => { const n = deadlineIn(d); return `<a class="card row" href="#/d/${d.id}">⏰ <span class="grow">Claim ${esc(d.title)}</span><small>${n < 0 ? 'deadline passed' : n === 0 ? 'due today' : 'by ' + fmtDate(d.reimbDeadline)}</small></a>`; }).join('')}
       ${claimCard}
       ${warr.map(d => `<a class="card row" href="#/d/${d.id}">🛡️ <span class="grow">${esc(d.title)}</span><small>warranty ends ${fmtDate(d.warrantyUntil)}</small></a>`).join('')}
@@ -42,6 +48,7 @@ export function home(view) {
       <a class="card tile" href="#/watch"><b>${live('watch').filter(w => w.status !== 'watched').length}</b><small>🍿 to watch</small></a>
     </div>`;
   renderCapture($('#home-cap'), { onSaved: () => {} });
+  bindAskCard(view);
   $('#spin-rand')?.addEventListener('click', () => { const s = $('#spin-p'); s.selectedIndex = Math.floor(Math.random() * s.options.length); });
   $('#spin-watch')?.addEventListener('click', () => go(`#/watch?with=${$('#spin-p').value}`));
   $$('[data-i]', view).forEach(b => b.onclick = () => go(`#/p/${$('#spin-p').value}/plan?i=${b.dataset.i}`));

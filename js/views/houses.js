@@ -6,6 +6,7 @@ import { aiReady, aiName, houseReport, reverseGeocode } from '../ai.js';
 import { loadLeaflet, pickLocation } from '../geo.js';
 import { shareHouse } from '../houseshare.js';
 import { inspectionCard } from './inspect.js';
+import { myHomeCard, makeMyHome, myHome, homeHouse } from './myhome.js';
 
 const STATUS = {
   to_visit: { l: 'To visit', e: '🗓️' },
@@ -46,6 +47,7 @@ export function housesList(view) {
       ${[['active', 'Active'], ...Object.entries(STATUS).map(([k, v]) => [k, `${v.e} ${v.l}`]), ['all', 'All']].map(([k, l]) =>
         `<button class="chip ${filter === k ? 'on' : ''}" data-f="${k}">${l} <small>${k === 'all' ? all.length : k === 'active' ? all.filter(h => h.status !== 'rejected').length : all.filter(h => h.status === k).length}</small></button>`).join('')}
     </div>
+    ${homeHouse() ? `<a class="card row insp-cta" href="#/myhome">🏡 <span class="grow"><b>My home</b><br><small class="muted">${esc(homeHouse().title)} · rent, upkeep & repairs</small></span><span class="muted">›</span></a>` : ''}
     <div class="row"><div class="seg"><button class="${mode === 'list' ? 'on' : ''}" data-m="list">☰ List</button><button class="${mode === 'map' ? 'on' : ''}" data-m="map">🗺️ Map</button></div>
       <span class="grow"></span><a class="btn" href="#/houses/report">📄 Summary report</a></div>
     <div id="hbody"></div>
@@ -163,6 +165,7 @@ export function houseDetail(view, id) {
     ${pendingFor('houses', id).length ? `<div class="card upbox"><b>⬆️ ${pendingFor('houses', id).length} photo${pendingFor('houses', id).length === 1 ? '' : 's'} still uploading…</b><div class="small muted">They'll appear here as each one finishes.</div></div>` : ''}
     <div class="row"><h2 class="grow">${esc(h.title || 'Untitled')}</h2><button class="btn" id="h-share">📤 Share</button><a class="btn" href="#/h/${id}/edit">✏️ Edit</a></div>
     <div class="chips">${Object.entries(STATUS).map(([k, v]) => `<button class="chip ${h.status === k ? 'on' : ''}" data-s="${k}">${v.e} ${v.l}</button>`).join('')}</div>
+    ${myHomeCard(h)}
     ${inspectionCard(h)}
     <div class="grid2 card">
       ${kv('Price', fmtMoney(h.price) && fmtMoney(h.price) + (h.deal === 'rent' ? ' / month' : ''))}
@@ -189,6 +192,7 @@ export function houseDetail(view, id) {
     ${h.listingUrl ? `<p><a target="_blank" rel="noopener" href="${esc(h.listingUrl)}">🔗 Listing</a></p>` : ''}
     <button class="btn danger" id="h-del">Delete house</button>`;
   $$('[data-s]', view).forEach(b => b.onclick = () => { h.status = b.dataset.s; upsert('houses', h); houseDetail(view, id); });
+  $('#mh-make')?.addEventListener('click', () => makeMyHome(h));
   $('#h-share').onclick = () => shareHouse(h, { priceLine: priceLine(h), status: `${STATUS[h.status]?.e || ''} ${STATUS[h.status]?.l || ''}`.trim(), distances: distances(h).sort((a, b) => a.d - b.d) });
   $('#h-del').onclick = async () => {
     if (!(await confirmDlg('Delete this house and its photos?'))) return;
