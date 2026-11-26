@@ -72,31 +72,51 @@ export class DriveBackend {
   }
 
   hasToken() { return !!this.token && Date.now() < this.exp - 60000; }
+  // ms until the access token runs out (0 if none). Browser-only Google sign-in gives 1-hour tokens and no refresh token.
+  expiresIn() { return this.token ? Math.max(0, this.exp - Date.now()) : 0; }
 
-  // Call from a tap/click so the Google popup isn't blocked.
+  // Call from a tap/click so the Google popup isn't blocked. requestAccessToken must run synchronously inside
+  // the tap, so the token client is created once and reused. With the account remembered (login_hint) and consent
+  // already given, Google's window usually closes by itself without asking anything.
   async signIn() {
     if (!this.clientId) throw new Error('Add your Google OAuth Client ID first (Settings or js/config.js).');
     if (!window.google?.accounts?.oauth2) await preloadGoogle();
-    await new Promise((res, rej) => {
-      const client = google.accounts.oauth2.initTokenClient({
-        client_id: this.clientId,
-        scope: SCOPE,
-        callback: r => {
-          if (r.error) return rej(new Error(r.error_description || r.error));
-          this.token = r.access_token;
-          this.exp = Date.now() + (+r.expires_in || 3600) * 1000;
-          localStorage.setItem('lu.tok', JSON.stringify({ token: this.token, exp: this.exp }));
-          res();
-        },
-        error_callback: e => rej(new Error(e?.message || e?.type || 'Google sign-in was cancelled')),
-      });
-      client.requestAccessToken({ prompt: '' });
-    });
+    if (this.pending) return this.pending;
+    this.pending = new Promise((res, rej) => {
+      this.waiters = { res, rej };
+      if (!this.client) {
+        this.client = google.accounts.oauth2.initTokenClient({
+          client_id: this.clientId,
+          scope: SCOPE,
+          callback: r => {
+            const w = this.waiters; this.waiters = null;
+            if (r.error) return w?.rej(new Error(r.error_description || r.error));
+            this.token = r.access_token;
+            this.exp = Date.now() + (+r.expires_in || 3600) * 1000;
+            localStorage.setItem('lu.tok', JSON.stringify({ token: this.token, exp: this.exp }));
+            w?.res();
+            if (!localStorage.getItem('lu.ghint')) this.rememberAccount();
+          },
+          error_callback: e => { const w = this.waiters; this.waiters = null; w?.rej(new Error(e?.type === 'popup_closed' ? 'Google sign-in was closed' : e?.message || e?.type || 'Google sign-in was cancelled')); },
+        });
+      }
+      const hint = localStorage.getItem('lu.ghint');
+      this.client.requestAccessToken({ prompt: '', ...(hint ? { login_hint: hint } : {}) });
+    }).finally(() => { this.pending = null; });
+    return this.pending;
+  }
+
+  // Remember which Google account this is (kept on this device only), so renewing doesn't show the account chooser.
+  async rememberAccount() {
+    try {
+      const j = await (await this.req(`${API}/about?fields=user(emailAddress)`)).json();
+      if (j.user?.emailAddress) localStorage.setItem('lu.ghint', j.user.emailAddress);
+    } catch { /* not important */ }
   }
 
   signOut() {
     if (this.token && window.google?.accounts?.oauth2) google.accounts.oauth2.revoke(this.token, () => {});
-    this.token = null; localStorage.removeItem('lu.tok');
+    this.token = null; localStorage.removeItem('lu.tok'); localStorage.removeItem('lu.ghint');
   }
 
   async req(url, opts = {}) {

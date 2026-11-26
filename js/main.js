@@ -2,7 +2,7 @@ import { state, cfg, on, setStatus, readCache, loadFromBackend, flush, isDirty }
 import { AuthNeeded } from './storage.js';
 import { $, esc, toast, gallery, go } from './ui.js';
 import { pendingJobs } from './uploads.js';
-import { makeBackend, connectDrive } from './connect.js';
+import { makeBackend } from './connect.js';
 import { home } from './views/home.js';
 import { peopleList, personPage } from './views/people.js';
 import { addPage, importPage } from './views/capture.js';
@@ -76,22 +76,50 @@ function renderStatus() {
   const busy = (state.uploading ? `⬆️ ${state.uploading} photo${state.uploading === 1 ? '' : 's'} · ` : '') + (state.busy ? `🔎 ${state.busy} · ` : '');
   const map = {
     idle: '', loading: state.statusMsg || '⟳ Loading…', saving: '⟳ Saving…', pending: '• Unsaved',
-    saved: local ? '📱 On device' : '✓ Saved', auth: '⚠️ Tap to reconnect Drive', error: '⚠️ Sync problem',
+    saved: local ? '📱 On device' : '✓ Saved', auth: isDirty() ? '🔄 Saved on phone · tap to sync' : '🔄 Tap to resume sync', error: '⚠️ Sync problem',
   };
   el.textContent = busy + (map[s] ?? '');
-  el.className = 'pill' + (s === 'auth' || s === 'error' ? ' warn' : '');
-  el.title = state.statusMsg || '';
+  el.className = 'pill' + (s === 'error' ? ' warn' : s === 'auth' ? ' soft' : '');
+  el.title = s === 'auth' ? 'Google Drive sign-in lasts an hour. The app renews it the next time you tap anything; your changes are kept on this phone meanwhile.' : state.statusMsg || '';
 }
 
-$('#sync').addEventListener('click', async () => {
-  if (state.status === 'auth') {
-    try {
-      await connectDrive();
+/* ---------- keeping Google Drive connected ----------
+   Browser-only Google sign-in hands out 1-hour tokens and no refresh token, and a new one can only be requested
+   from inside a tap (Google opens a small window). So: renew automatically on your next tap anywhere when the token
+   is about to run out or already has — usually that window opens and closes by itself. */
+let renewing = false, lastFail = 0;
+async function renewDrive({ manual = false } = {}) {
+  const b = state.backend;
+  if (!b || b.kind !== 'drive' || renewing) return;
+  renewing = true;
+  const wasAuth = state.status === 'auth';
+  try {
+    await b.signIn();
+    if (!b.folderId) await loadFromBackend();          // first connection this session: load + merge offline edits
+    else {
+      if (wasAuth) setStatus(isDirty() ? 'pending' : 'saved');
       if (isDirty()) await flush();
-      toast('Reconnected ✅');
-      route();
-    } catch (e) { toast(e.message, 5000); }
-  } else if (state.status === 'error') {
+    }
+    if (manual || wasAuth) toast('Drive synced ✅', 1800);
+  } catch (e) {
+    lastFail = Date.now(); // e.g. you closed Google's window: don't pop it up again on every tap
+    if (manual) toast(e.message, 5000);
+    if (!b.hasToken()) setStatus('auth', e.message);
+  } finally { renewing = false; }
+}
+document.addEventListener('click', e => {
+  const b = state.backend;
+  if (!b || b.kind !== 'drive' || renewing || !cfg('mode')) return;
+  if (document.documentElement.classList.contains('locked') || e.target.closest('#sync, #lock')) return;
+  const due = state.status === 'auth' || b.expiresIn() < 8 * 60 * 1000; // renew a little before it runs out
+  if (due && Date.now() - lastFail > 60000) renewDrive();
+}, true);
+// notice when the hour is up even if nothing has tried to save yet
+setInterval(() => { const b = state.backend; if (b?.kind === 'drive' && !b.hasToken() && state.status !== 'auth' && state.status !== 'idle') setStatus('auth'); }, 60000);
+
+$('#sync').addEventListener('click', async () => {
+  if (state.status === 'auth') renewDrive({ manual: true });
+  else if (state.status === 'error') {
     toast(state.statusMsg || 'Sync error', 5000);
     flush();
   }

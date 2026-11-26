@@ -134,7 +134,7 @@ export async function settingsPage(view) {
   $('#s-forget').onclick = async () => {
     if (!(await confirmDlg('Forget this device? Unsynced changes will be lost.', 'Forget'))) return;
     state.backend?.signOut?.();
-    ['lu.settings', 'lu.tok', 'lu.cache', 'lu.dirty', 'lu.lock', 'lu.lockfail'].forEach(k => localStorage.removeItem(k));
+    ['lu.settings', 'lu.tok', 'lu.ghint', 'lu.cache', 'lu.dirty', 'lu.lock', 'lu.lockfail'].forEach(k => localStorage.removeItem(k));
     location.hash = '#/'; location.reload();
   };
 }

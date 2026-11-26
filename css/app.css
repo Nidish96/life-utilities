@@ -32,6 +32,7 @@ code { background: var(--accent-soft); padding: 1px 5px; border-radius: 6px; fon
 .pill { font: inherit; font-size: 12px; padding: 4px 10px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); color: var(--muted); white-space: nowrap; cursor: pointer; max-width: 46vw; overflow: hidden; text-overflow: ellipsis; }
 .pill:empty { display: none; }
 .pill.warn { background: #fdecc8; color: #7a4d00; border-color: #f2d28a; }
+.pill.soft { color: var(--accent); border-color: var(--accent-soft); }
 main { padding: 14px 14px calc(100px + var(--safe-b)); max-width: 760px; margin: 0 auto; }
 .tabbar { position: fixed; bottom: 0; left: 0; right: 0; z-index: 20; display: flex; justify-content: space-around; align-items: flex-end;
   padding: 6px 4px calc(6px + var(--safe-b)); background: var(--card); border-top: 1px solid var(--line); }

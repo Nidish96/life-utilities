@@ -158,7 +158,7 @@ function forgot(el) {
   $('#lk-back', box).onclick = render;
   $('#lk-erase', box).onclick = async () => {
     if (local && !confirm('Delete everything stored on this device? This cannot be undone.')) return;
-    ['lu.settings', 'lu.tok', 'lu.cache', 'lu.dirty', KEY, FAIL].forEach(k => localStorage.removeItem(k));
+    ['lu.settings', 'lu.tok', 'lu.ghint', 'lu.cache', 'lu.dirty', KEY, FAIL].forEach(k => localStorage.removeItem(k));
     try { sessionStorage.clear(); } catch { /* ignore */ }
     try { indexedDB.deleteDatabase('lifeutils'); } catch { /* ignore */ }
     location.hash = '#/'; location.reload();
